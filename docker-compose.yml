@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: intelligent-kitchen-db
+    environment:
+      POSTGRES_DB: intelligent_kitchen
+      POSTGRES_USER: kitchen_user
+      POSTGRES_PASSWORD: kitchen_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - kitchen-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: intelligent-kitchen-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kitchen-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: intelligent-kitchen-backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://kitchen_user:kitchen_password@postgres:5432/intelligent_kitchen
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - kitchen-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: intelligent-kitchen-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - kitchen-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  kitchen-network:
+    driver: bridge
