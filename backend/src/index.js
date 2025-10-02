@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const { runMigrations } = require('./database/migrate');
+const db = require('./config/database');
 
 // Load environment variables
 dotenv.config();
@@ -30,13 +31,45 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
+// Enhanced health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const dbHealthy = db.isHealthy();
+    const lastHealthCheck = db.getLastHealthCheck();
+    
+    // Perform additional database health check if needed
+    if (!dbHealthy || !lastHealthCheck || (Date.now() - lastHealthCheck.getTime()) > 60000) {
+      await db.checkHealth();
+    }
+    
+    const healthData = {
+      status: db.isHealthy() ? 'OK' : 'ERROR',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      database: {
+        healthy: db.isHealthy(),
+        lastHealthCheck: db.getLastHealthCheck(),
+        connected: db.pool.totalCount > 0,
+        idleConnections: db.pool.idleCount,
+        totalConnections: db.pool.totalCount
+      },
+      uptime: process.uptime(),
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
+      }
+    };
+    
+    const statusCode = db.isHealthy() ? 200 : 503;
+    res.status(statusCode).json(healthData);
+  } catch (error) {
+    res.status(503).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      error: 'Health check failed',
+      details: error.message
+    });
+  }
 });
 
 // API routes
@@ -47,12 +80,46 @@ app.use('/api/recipes', require('./controllers/recipeController'));
 app.use('/api/meal-plans', require('./controllers/mealPlanController'));
 app.use('/api/grocery-lists', require('./controllers/groceryController'));
 
-// Error handling middleware
+// Enhanced error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  console.error('💥 Application Error:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+
+  // Handle specific database errors
+  if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
+    console.warn('⚠️  Database connection error detected:', err.message);
+    return res.status(503).json({
+      error: 'Database temporarily unavailable',
+      message: 'Please try again in a moment',
+      retryable: true
+    });
+  }
+
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      error: 'Validation error',
+      details: err.message
+    });
+  }
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      error: 'Invalid authentication token'
+    });
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({ 
+    error: err.name || 'Something went wrong!',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
