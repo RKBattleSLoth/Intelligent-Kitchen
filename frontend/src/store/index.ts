@@ -4,6 +4,7 @@ import pantryReducer from './slices/pantrySlice'
 import recipesReducer from './slices/recipesSlice'
 import mealPlanningReducer from './slices/mealPlanningSlice'
 import groceryReducer from './slices/grocerySlice'
+import aiReducer from './slices/aiSlice'
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     recipes: recipesReducer,
     mealPlanning: mealPlanningReducer,
     grocery: groceryReducer,
+    ai: aiReducer,
   },
 })
 
