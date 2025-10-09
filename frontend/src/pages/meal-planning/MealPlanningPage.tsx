@@ -1,572 +1,656 @@
-import { useState, useEffect } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
-import { RootState } from '../../store'
-import { fetchMealPlanRange, addMealEntry, createMealPlan, fetchMealPlans, updateMealEntry, deleteMealEntry } from '../../store/slices/mealPlanningSlice'
-import { fetchRecipes } from '../../store/slices/recipesSlice'
-import { generateGroceryList } from '../../store/slices/grocerySlice'
+import React, { useState, useEffect } from 'react'
+import { MealSlot, PlannedMeal, MealPlanFilters, DEFAULT_MEAL_PLAN_FILTERS, MEAL_SLOTS } from '../../types/mealPlan'
+import { Recipe } from '../../types/recipe'
+import { mealPlanService } from '../../services/mealPlanService'
+import { recipeService } from '../../services/recipeService'
+import { RecipeForm } from '../../components/recipes/RecipeForm'
 
-const MealPlanningPage = () => {
-  const [selectedWeek, setSelectedWeek] = useState(new Date())
-  const [showAddMealForm, setShowAddMealForm] = useState(false)
-  const [showEditMealForm, setShowEditMealForm] = useState(false)
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [selectedMealType, setSelectedMealType] = useState<string>('breakfast')
-  const [selectedRecipe, setSelectedRecipe] = useState<string>('')
-  const [editingMeal, setEditingMeal] = useState<any>(null)
-
-  const dispatch = useDispatch()
-  const { mealPlanRange, isLoading, error } = useSelector((state: RootState) => state.mealPlanning)
-  const { recipes } = useSelector((state: RootState) => state.recipes)
-
-  const weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
-
-  const getWeekDates = (date: Date) => {
-    const week = []
-    const startOfWeek = new Date(date)
-    const day = startOfWeek.getDay()
-    const diff = startOfWeek.getDate() - day
-    startOfWeek.setDate(diff)
-
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(startOfWeek)
-      day.setDate(startOfWeek.getDate() + i)
-      week.push(day)
-    }
-    return week
-  }
-
-  const weekDates = getWeekDates(selectedWeek)
-
-  // Fetch meal plan data for the current week
-  useEffect(() => {
-    const startDate = weekDates[0].toLocaleDateString('en-CA')
-    const endDate = weekDates[6].toLocaleDateString('en-CA')
-    dispatch(fetchMealPlanRange({ startDate, endDate }) as any)
-  }, [selectedWeek, dispatch])
-
-  // Fetch recipes for the meal selection
-  useEffect(() => {
-    dispatch(fetchRecipes() as any)
-  }, [dispatch])
-
-  const navigateWeek = (direction: 'prev' | 'next') => {
-    const newDate = new Date(selectedWeek)
-    newDate.setDate(selectedWeek.getDate() + (direction === 'next' ? 7 : -7))
-    setSelectedWeek(newDate)
-  }
-
-  const handleAddMeal = async () => {
-    if (!selectedDay || !selectedRecipe) return
-
-    try {
-      // First, get existing meal plans or create a default one
-      const mealPlansResult = await dispatch(fetchMealPlans() as any)
-      const mealPlans = mealPlansResult.payload
-      
-      let mealPlanId = mealPlans[0]?.id
-      
-      // If no meal plan exists, create one
-      if (!mealPlanId) {
-        const weekStart = weekDates[0].toLocaleDateString('en-CA')
-        const weekEnd = weekDates[6].toLocaleDateString('en-CA')
-        
-        const createResult = await dispatch(createMealPlan({
-          name: 'Weekly Meal Plan',
-          startDate: weekStart,
-          endDate: weekEnd,
-          notes: ''
-        }) as any)
-        
-        if (createResult.error) {
-          throw new Error(createResult.error)
-        }
-        
-        mealPlanId = createResult.payload.id
-      }
-      
-      // Now add the meal entry
-      const addResult = await dispatch(addMealEntry({
-        mealPlanId,
-        mealDate: selectedDay,
-        mealType: selectedMealType,
-        recipeId: selectedRecipe,
-        notes: ''
-      }) as any)
-      
-      if (addResult.error) {
-        throw new Error(addResult.error)
-      }
-      
-      // Reset form and close modal
-      setSelectedRecipe('')
-      setSelectedMealType('breakfast')
-      setShowAddMealForm(false)
-      
-      // Refresh the meal plan data
-      const startDate = weekDates[0].toLocaleDateString('en-CA')
-      const endDate = weekDates[6].toLocaleDateString('en-CA')
-      dispatch(fetchMealPlanRange({ startDate, endDate }) as any)
-    } catch (error) {
-      console.error('Failed to add meal:', error)
-      // Error will be displayed via Redux state
-    }
-  }
-
-  const handleCellClick = (date: Date, mealType: string) => {
-    setSelectedDay(date.toLocaleDateString('en-CA'))
-    setSelectedMealType(mealType.toLowerCase())
-    setShowAddMealForm(true)
-  }
-
-  const handleEditMeal = (meal: any) => {
-    setEditingMeal(meal)
-    setSelectedDay(meal.mealDate.split('T')[0])
-    setSelectedMealType(meal.mealType)
-    setSelectedRecipe(meal.recipeId || '')
-    setShowEditMealForm(true)
-  }
-
-  const handleUpdateMeal = async () => {
-    if (!editingMeal || !selectedDay || !selectedRecipe) return
-
-    try {
-      const updateResult = await dispatch(updateMealEntry({
-        entryId: editingMeal.id,
-        mealDate: selectedDay,
-        mealType: selectedMealType,
-        recipeId: selectedRecipe,
-        notes: ''
-      }) as any)
-      
-      if (updateResult.error) {
-        throw new Error(updateResult.error)
-      }
-      
-      // Reset form and close modal
-      setEditingMeal(null)
-      setSelectedRecipe('')
-      setSelectedMealType('breakfast')
-      setShowEditMealForm(false)
-      
-      // Refresh the meal plan data
-      const startDate = weekDates[0].toLocaleDateString('en-CA')
-      const endDate = weekDates[6].toLocaleDateString('en-CA')
-      dispatch(fetchMealPlanRange({ startDate, endDate }) as any)
-    } catch (error) {
-      console.error('Failed to update meal:', error)
-    }
-  }
-
-  const handleDeleteMeal = async (mealId: string) => {
-    if (!confirm('Are you sure you want to delete this meal?')) return
-
-    try {
-      const deleteResult = await dispatch(deleteMealEntry(mealId) as any)
-      
-      if (deleteResult.error) {
-        throw new Error(deleteResult.error)
-      }
-      
-      // Refresh the meal plan data
-      const startDate = weekDates[0].toLocaleDateString('en-CA')
-      const endDate = weekDates[6].toLocaleDateString('en-CA')
-      dispatch(fetchMealPlanRange({ startDate, endDate }) as any)
-    } catch (error) {
-      console.error('Failed to delete meal:', error)
-    }
-  }
-
-  const handleGenerateShoppingList = async () => {
-    try {
-      // First, get the current meal plan for this week
-      const mealPlansResult = await dispatch(fetchMealPlans() as any)
-      const mealPlans = mealPlansResult.payload
-      
-      if (!mealPlans || mealPlans.length === 0) {
-        alert('No meal plans found. Please create a meal plan first.')
-        return
-      }
-      
-      // Use the first meal plan (or you could let user choose)
-      const mealPlanId = mealPlans[0].id
-      const listName = `Shopping List - ${new Date().toLocaleDateString()}`
-      
-      const generateResult = await dispatch(generateGroceryList({ 
-        mealPlanId, 
-        name: listName 
-      } as any))
-      
-      if (generateResult.error) {
-        throw new Error(generateResult.error)
-      }
-      
-      alert('Shopping list generated successfully! Check the Grocery Lists page.')
-    } catch (error) {
-      console.error('Failed to generate shopping list:', error)
-      alert('Failed to generate shopping list. Please try again.')
-    }
-  }
-
-  const getMealsForDay = (date: Date) => {
-    const dateStr = date.toLocaleDateString('en-CA')
-    return mealPlanRange.filter(meal => {
-      // Extract just the date part from the ISO string (YYYY-MM-DD)
-      const mealDateStr = meal.mealDate.split('T')[0]
-      return mealDateStr === dateStr
-    })
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Meal Planning</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">Plan your meals for the week</p>
-        </div>
-        
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3 dark:bg-red-900/20 dark:border-red-800">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          </div>
-        )}
-        <button
-          onClick={() => setShowAddMealForm(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700"
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Meal
-        </button>
-      </div>
-
-      <div className="bg-white shadow rounded-lg dark:bg-dark-800 dark:border-gray-700">
-        <div className="px-4 py-5 sm:p-6">
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <button
-                  onClick={() => navigateWeek('prev')}
-                  className="p-2 hover:bg-gray-100 rounded-full dark:hover:bg-dark-700"
-                >
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Week of {weekDates[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                </h2>
-                <button
-                  onClick={() => navigateWeek('next')}
-                  className="p-2 hover:bg-gray-100 rounded-full dark:hover:bg-dark-700"
-                >
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-                {weekDates.map((date, index) => {
-                  const dayMeals = getMealsForDay(date)
-                  const isToday = date.toDateString() === new Date().toDateString()
-                  
-                  return (
-                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden dark:border-gray-700">
-                      <div className={`p-3 ${isToday ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-dark-700'}`}>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">{weekDays[index]}</h3>
-                        <p className={`text-sm ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                      <div className="p-3 space-y-2">
-                        {mealTypes.map(mealType => {
-                          const meal = dayMeals.find(m => m.mealType === mealType.toLowerCase())
-                          return (
-                            <div 
-                              key={mealType} 
-                              className={`border border-gray-200 rounded p-2 ${!meal ? 'hover:bg-gray-50 cursor-pointer dark:hover:bg-dark-700' : 'cursor-default bg-gray-50 dark:bg-dark-700'} dark:border-gray-600`}
-                              onClick={() => !meal && handleCellClick(date, mealType)}
-                            >
-                              <div className="text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">{mealType}</div>
-                              {meal ? (
-                                <div className="group relative">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-white">{meal.recipeName}</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">{meal.cookTime} min</div>
-                                  <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleEditMeal(meal)
-                                      }}
-                                      className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                      title="Edit meal"
-                                    >
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleDeleteMeal(meal.id)
-                                      }}
-                                      className="p-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                      title="Delete meal"
-                                    >
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-sm text-gray-400 italic dark:text-gray-500">Click to add meal</div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white shadow rounded-lg dark:bg-dark-800 dark:border-gray-700">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4 dark:text-white">Quick Actions</h3>
-            <div className="space-y-3">
-              <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600">
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Copy Last Week's Plan
-              </button>
-              <button 
-                onClick={handleGenerateShoppingList}
-                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Generate Shopping List
-              </button>
-              <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:border-gray-600 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600">
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Export to Calendar
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white shadow rounded-lg dark:bg-dark-800 dark:border-gray-700">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4 dark:text-white">This Week's Summary</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Total Meals Planned</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">21</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Unique Recipes</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">12</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Estimated Cost</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">$156</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Prep Time Total</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">8.5 hours</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Add Meal Modal */}
-      {showAddMealForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 dark:bg-black dark:bg-opacity-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-dark-800 dark:border-gray-700">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Add Meal</h3>
-                <button
-                  onClick={() => setShowAddMealForm(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Date
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedDay ? new Date(selectedDay).toLocaleDateString() : ''}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Meal Type
-                  </label>
-                  <select
-                    value={selectedMealType}
-                    onChange={(e) => setSelectedMealType(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  >
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snack">Snack</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Recipe
-                  </label>
-                  <select
-                    value={selectedRecipe}
-                    onChange={(e) => setSelectedRecipe(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  >
-                    <option value="">Select a recipe</option>
-                    {recipes.map((recipe) => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowAddMealForm(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddMeal}
-                    disabled={!selectedRecipe}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700"
-                  >
-                    Add Meal
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Meal Modal */}
-      {showEditMealForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 dark:bg-black dark:bg-opacity-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-dark-800 dark:border-gray-700">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Edit Meal</h3>
-                <button
-                  onClick={() => setShowEditMealForm(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Date
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedDay ? new Date(selectedDay).toLocaleDateString() : ''}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Meal Type
-                  </label>
-                  <select
-                    value={selectedMealType}
-                    onChange={(e) => setSelectedMealType(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  >
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snack">Snack</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Recipe
-                  </label>
-                  <select
-                    value={selectedRecipe}
-                    onChange={(e) => setSelectedRecipe(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  >
-                    <option value="">Select a recipe</option>
-                    {recipes.map((recipe) => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowEditMealForm(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleUpdateMeal}
-                    disabled={!selectedRecipe}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700"
-                  >
-                    Update Meal
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+interface RecipeSelectionModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSelectRecipe: (recipe: Recipe) => void
+  onAddNewRecipe: () => void
+  mealSlot: MealSlot
+  date: string
 }
 
-export default MealPlanningPage
+const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
+  isOpen,
+  onClose,
+  onSelectRecipe,
+  onAddNewRecipe,
+  mealSlot,
+  date
+}) => {
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (isOpen) {
+      loadRecipes()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    filterRecipes()
+  }, [recipes, searchTerm])
+
+  const loadRecipes = async () => {
+    try {
+      const recipeList = await recipeService.getAllRecipes()
+      // Filter recipes by category matching the meal slot
+      const filteredByCategory = recipeList.filter(recipe => recipe.category === mealSlot)
+      setRecipes(filteredByCategory)
+    } catch (error) {
+      console.error('Error loading recipes:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterRecipes = () => {
+    let filtered = recipes
+
+    if (searchTerm) {
+      filtered = filtered.filter(recipe => 
+        recipe.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        recipe.instructions.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    setFilteredRecipes(filtered)
+  }
+
+  if (!isOpen) return null
+
+  return React.createElement('div', {
+    style: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }
+  }, [
+    React.createElement('div', {
+      key: 'modal',
+      style: {
+        background: '#1e293b',
+        border: '1px solid #334155',
+        borderRadius: '0.5rem',
+        padding: '2rem',
+        maxWidth: '600px',
+        width: '90%',
+        maxHeight: '80vh',
+        overflow: 'auto'
+      }
+    }, [
+      // Header
+      React.createElement('div', {
+        key: 'header',
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.5rem'
+        }
+      }, [
+        React.createElement('h2', {
+          key: 'title',
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
+        }, `Select ${mealSlot} Recipe`),
+        React.createElement('button', {
+          key: 'close',
+          onClick: onClose,
+          style: {
+            background: 'none',
+            border: 'none',
+            fontSize: '1.5rem',
+            cursor: 'pointer',
+            color: '#94a3b8'
+          }
+        }, '×')
+      ]),
+
+      // Date display
+      React.createElement('p', {
+        key: 'date',
+        style: { color: '#94a3b8', marginBottom: '1rem' }
+      }, `Date: ${new Date(date).toLocaleDateString()}`),
+
+      // Search
+      React.createElement('input', {
+        key: 'search',
+        type: 'text',
+        placeholder: 'Search recipes...',
+        value: searchTerm,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value),
+        style: {
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid #4b5563',
+          borderRadius: '0.375rem',
+          fontSize: '1rem',
+          background: '#0f172a',
+          color: '#f9fafb',
+          marginBottom: '1rem'
+        }
+      }),
+
+      // Add new recipe button
+      React.createElement('button', {
+        key: 'add-new',
+        onClick: onAddNewRecipe,
+        style: {
+          width: '100%',
+          padding: '0.75rem',
+          background: '#3b82f6',
+          color: 'white',
+          border: 'none',
+          borderRadius: '0.375rem',
+          fontSize: '1rem',
+          cursor: 'pointer',
+          marginBottom: '1rem'
+        }
+      }, `+ Add New ${mealSlot} Recipe`),
+
+      // Recipe list
+      React.createElement('div', {
+        key: 'recipe-list',
+        style: { maxHeight: '300px', overflow: 'auto' }
+      }, 
+        loading 
+          ? React.createElement('div', {
+              style: { textAlign: 'center', padding: '2rem', color: '#94a3b8' }
+            }, 'Loading recipes...')
+          : filteredRecipes.length === 0
+            ? React.createElement('div', {
+                style: { textAlign: 'center', padding: '2rem', color: '#94a3b8' }
+              }, searchTerm 
+                ? 'No recipes found matching your search'
+                : `No ${mealSlot} recipes found. Try adding one first!`)
+            : filteredRecipes.map(recipe => 
+                React.createElement('div', {
+                  key: recipe.id,
+                  onClick: () => onSelectRecipe(recipe),
+                  style: {
+                    padding: '1rem',
+                    border: '1px solid #334155',
+                    borderRadius: '0.375rem',
+                    marginBottom: '0.5rem',
+                    cursor: 'pointer',
+                    background: '#0f172a',
+                    transition: 'background 0.2s'
+                  }
+                }, [
+                  React.createElement('h3', {
+                    key: 'name',
+                    style: {
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      marginBottom: '0.5rem',
+                      color: '#f1f5f9'
+                    }
+                  }, recipe.name),
+                  React.createElement('p', {
+                    key: 'preview',
+                    style: {
+                      fontSize: '0.875rem',
+                      color: '#94a3b8',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }
+                  }, recipe.instructions.substring(0, 100) + (recipe.instructions.length > 100 ? '...' : ''))
+                ])
+              )
+      )
+    ])
+  ])
+}
+
+export const MealPlanningPage: React.FC = () => {
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [filters, setFilters] = useState<MealPlanFilters>(DEFAULT_MEAL_PLAN_FILTERS)
+  const [plannedMeals, setPlannedMeals] = useState<Record<string, PlannedMeal>>({})
+  const [selectedSlot, setSelectedSlot] = useState<{ date: string; mealSlot: MealSlot } | null>(null)
+  const [showRecipeModal, setShowRecipeModal] = useState(false)
+  const [showRecipeForm, setShowRecipeForm] = useState(false)
+  const [draggedMeal, setDraggedMeal] = useState<{ date: string; mealSlot: MealSlot; meal: PlannedMeal } | null>(null)
+  const [dragOverSlot, setDragOverSlot] = useState<{ date: string; mealSlot: MealSlot } | null>(null)
+
+  useEffect(() => {
+    loadFilters()
+    loadPlannedMeals()
+  }, [currentDate])
+
+  const loadFilters = () => {
+    const savedFilters = mealPlanService.getFilters()
+    setFilters(savedFilters)
+  }
+
+  const loadPlannedMeals = () => {
+    const meals: Record<string, PlannedMeal> = {}
+    const startDate = new Date(currentDate)
+    startDate.setDate(startDate.getDate() - startDate.getDay()) // Start of week
+    startDate.setHours(0, 0, 0, 0)
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startDate)
+      date.setDate(startDate.getDate() + i)
+      const dateStr = date.toISOString().split('T')[0]
+
+      MEAL_SLOTS.forEach(mealSlot => {
+        const plannedMeal = mealPlanService.getPlannedMeal(dateStr, mealSlot)
+        if (plannedMeal) {
+          meals[`${dateStr}-${mealSlot}`] = plannedMeal
+        }
+      })
+    }
+
+    setPlannedMeals(meals)
+  }
+
+  const handleFilterToggle = (mealSlot: keyof MealPlanFilters) => {
+    const newFilters = { ...filters, [mealSlot]: !filters[mealSlot] }
+    setFilters(newFilters)
+    mealPlanService.updateFilters(newFilters)
+  }
+
+  const handleMealSlotClick = (date: string, mealSlot: MealSlot) => {
+    setSelectedSlot({ date, mealSlot })
+    setShowRecipeModal(true)
+  }
+
+  const handleRecipeSelect = (recipe: Recipe) => {
+    if (selectedSlot) {
+      mealPlanService.addPlannedMeal(selectedSlot.date, selectedSlot.mealSlot, recipe)
+      loadPlannedMeals()
+    }
+    setShowRecipeModal(false)
+    setSelectedSlot(null)
+  }
+
+  const handleAddNewRecipe = () => {
+    setShowRecipeModal(false)
+    setShowRecipeForm(true)
+  }
+
+  const handleRemoveMeal = (date: string, mealSlot: MealSlot) => {
+    mealPlanService.removePlannedMeal(date, mealSlot)
+    loadPlannedMeals()
+  }
+
+  const handleRecipeFormSave = () => {
+    setShowRecipeForm(false)
+    // Re-open the recipe modal to select the newly added recipe
+    setShowRecipeModal(true)
+  }
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, date: string, mealSlot: MealSlot, meal: PlannedMeal) => {
+    setDraggedMeal({ date, mealSlot, meal })
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent, date: string, mealSlot: MealSlot) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverSlot({ date, mealSlot })
+  }
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, targetDate: string, targetMealSlot: MealSlot) => {
+    e.preventDefault()
+    setDragOverSlot(null)
+
+    if (!draggedMeal) return
+
+    const { date: sourceDate, mealSlot: sourceMealSlot, meal } = draggedMeal
+
+    // Don't do anything if dropping on the same slot
+    if (sourceDate === targetDate && sourceMealSlot === targetMealSlot) {
+      setDraggedMeal(null)
+      return
+    }
+
+    // Get the meal that's currently in the target slot (if any)
+    const targetMeal = mealPlanService.getPlannedMeal(targetDate, targetMealSlot)
+
+    // Remove the meal from the source slot
+    mealPlanService.removePlannedMeal(sourceDate, sourceMealSlot)
+
+    // Add the dragged meal to the target slot
+    mealPlanService.addPlannedMeal(targetDate, targetMealSlot, meal.recipe)
+
+    // If there was a meal in the target slot, move it to the source slot
+    if (targetMeal) {
+      mealPlanService.addPlannedMeal(sourceDate, sourceMealSlot, targetMeal.recipe)
+    }
+
+    // Reload the planned meals to reflect the changes
+    loadPlannedMeals()
+    setDraggedMeal(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedMeal(null)
+    setDragOverSlot(null)
+  }
+
+  const getWeekDates = () => {
+    const dates = []
+    const startDate = new Date(currentDate)
+    startDate.setDate(startDate.getDate() - startDate.getDay()) // Start of week
+    startDate.setHours(0, 0, 0, 0)
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startDate)
+      date.setDate(startDate.getDate() + i)
+      dates.push(date)
+    }
+
+    return dates
+  }
+
+  const weekDates = getWeekDates()
+  const activeMealSlots = MEAL_SLOTS.filter(slot => filters[slot as keyof MealPlanFilters])
+
+  if (showRecipeForm && selectedSlot) {
+    return React.createElement('div', {
+      style: { padding: '2rem' }
+    }, [
+      React.createElement('div', {
+        key: 'header',
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem'
+        }
+      }, [
+        React.createElement('h2', {
+          key: 'title',
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
+        }, `Add New ${selectedSlot.mealSlot} Recipe`),
+        React.createElement('button', {
+          key: 'back',
+          onClick: () => setShowRecipeForm(false),
+          style: {
+            padding: '0.5rem 1rem',
+            background: '#374151',
+            color: '#f1f5f9',
+            border: '1px solid #4b5563',
+            borderRadius: '0.375rem',
+            cursor: 'pointer'
+          }
+        }, '← Back to Meal Planning')
+      ]),
+      React.createElement(RecipeForm, {
+        key: 'recipe-form',
+        defaultCategory: selectedSlot.mealSlot,
+        onSave: (recipe: Recipe) => {
+          setShowRecipeForm(false)
+          // Re-open the recipe modal to select the newly added recipe
+          setShowRecipeModal(true)
+        },
+        onCancel: () => setShowRecipeForm(false)
+      })
+    ])
+  }
+
+  return React.createElement('div', null, [
+    // Header
+    React.createElement('div', {
+      key: 'header',
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '2rem'
+      }
+    }, [
+      React.createElement('h1', {
+        key: 'title',
+        style: { fontSize: '2rem', fontWeight: 'bold', color: '#f1f5f9' }
+      }, '📅 Meal Planning'),
+      React.createElement('div', {
+        key: 'navigation',
+        style: { display: 'flex', gap: '1rem', alignItems: 'center' }
+      }, [
+        React.createElement('button', {
+          key: 'prev',
+          onClick: () => {
+            const newDate = new Date(currentDate)
+            newDate.setDate(newDate.getDate() - 7)
+            setCurrentDate(newDate)
+          },
+          style: {
+            padding: '0.5rem 1rem',
+            background: '#374151',
+            color: '#f1f5f9',
+            border: '1px solid #4b5563',
+            borderRadius: '0.375rem',
+            cursor: 'pointer'
+          }
+        }, '← Previous'),
+        React.createElement('span', {
+          key: 'current-week',
+          style: { 
+            color: '#f1f5f9', 
+            fontWeight: 'bold',
+            minWidth: '200px',
+            textAlign: 'center'
+          }
+        }, `Week of ${weekDates[0].toLocaleDateString()}`),
+        React.createElement('button', {
+          key: 'next',
+          onClick: () => {
+            const newDate = new Date(currentDate)
+            newDate.setDate(newDate.getDate() + 7)
+            setCurrentDate(newDate)
+          },
+          style: {
+            padding: '0.5rem 1rem',
+            background: '#374151',
+            color: '#f1f5f9',
+            border: '1px solid #4b5563',
+            borderRadius: '0.375rem',
+            cursor: 'pointer'
+          }
+        }, 'Next →')
+      ])
+    ]),
+
+    // Filters
+    React.createElement('div', {
+      key: 'filters',
+      style: {
+        background: '#1e293b',
+        padding: '1rem',
+        borderRadius: '0.5rem',
+        border: '1px solid #334155',
+        marginBottom: '2rem'
+      }
+    }, [
+      React.createElement('h3', {
+        key: 'filters-title',
+        style: { fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
+      }, 'Meal Slots to Display:'),
+      React.createElement('div', {
+        key: 'filter-buttons',
+        style: {
+          display: 'flex',
+          gap: '1rem',
+          flexWrap: 'wrap'
+        }
+      }, MEAL_SLOTS.map(mealSlot => 
+        React.createElement('button', {
+          key: mealSlot,
+          onClick: () => handleFilterToggle(mealSlot as keyof MealPlanFilters),
+          style: {
+            padding: '0.5rem 1rem',
+            background: filters[mealSlot as keyof MealPlanFilters] ? '#3b82f6' : '#374151',
+            color: '#f1f5f9',
+            border: '1px solid #4b5563',
+            borderRadius: '0.375rem',
+            cursor: 'pointer'
+          }
+        }, mealSlot)
+      ))
+    ]),
+
+    // Meal Planning Grid
+    React.createElement('div', {
+      key: 'grid',
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '120px repeat(7, 1fr)',
+        gap: '0.5rem',
+        overflow: 'auto'
+      }
+    }, [
+      // Empty corner cell
+      React.createElement('div', { key: 'corner' }),
+
+      // Day headers
+      ...weekDates.map(date => 
+        React.createElement('div', {
+          key: `header-${date.toISOString()}`,
+          style: {
+            textAlign: 'center',
+            padding: '0.5rem',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '0.375rem',
+            color: '#f1f5f9',
+            fontWeight: 'bold'
+          }
+        }, [
+          React.createElement('div', { key: 'day' }, date.toLocaleDateString('en-US', { weekday: 'short' })),
+          React.createElement('div', { key: 'date', style: { fontSize: '0.875rem', color: '#94a3b8' } }, 
+            date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+        ])
+      ),
+
+      // Meal rows
+      ...activeMealSlots.map(mealSlot => [
+        // Meal slot label
+        React.createElement('div', {
+          key: `label-${mealSlot}`,
+          style: {
+            padding: '0.5rem',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: '0.375rem',
+            color: '#f1f5f9',
+            fontWeight: 'bold',
+            textAlign: 'center'
+          }
+        }, mealSlot),
+
+        // Meal slots for each day
+        ...weekDates.map(date => {
+          const dateStr = date.toISOString().split('T')[0]
+          const plannedMeal = plannedMeals[`${dateStr}-${mealSlot}`]
+
+          const isDragOver = dragOverSlot?.date === dateStr && dragOverSlot?.mealSlot === mealSlot
+          const isBeingDragged = draggedMeal?.date === dateStr && draggedMeal?.mealSlot === mealSlot
+
+          return React.createElement('div', {
+            key: `${dateStr}-${mealSlot}`,
+            onClick: () => !isBeingDragged && handleMealSlotClick(dateStr, mealSlot),
+            onDragOver: (e: React.DragEvent) => handleDragOver(e, dateStr, mealSlot),
+            onDragLeave: handleDragLeave,
+            onDrop: (e: React.DragEvent) => handleDrop(e, dateStr, mealSlot),
+            draggable: !!plannedMeal,
+            onDragStart: plannedMeal ? (e: React.DragEvent) => handleDragStart(e, dateStr, mealSlot, plannedMeal) : undefined,
+            onDragEnd: handleDragEnd,
+            style: {
+              padding: '0.5rem',
+              minHeight: '80px',
+              background: isDragOver ? '#1e40af' : (plannedMeal ? '#0f172a' : '#1e293b'),
+              border: isDragOver ? '2px dashed #60a5fa' : '1px solid #334155',
+              borderRadius: '0.375rem',
+              cursor: plannedMeal ? 'move' : 'pointer',
+              transition: 'all 0.2s',
+              opacity: isBeingDragged ? 0.5 : 1,
+              transform: isBeingDragged ? 'scale(0.95)' : 'scale(1)'
+            }
+          }, [
+            plannedMeal ? [
+              React.createElement('div', {
+                key: 'drag-indicator',
+                style: {
+                  fontSize: '0.75rem',
+                  color: '#64748b',
+                  marginBottom: '0.25rem',
+                  textAlign: 'center'
+                }
+              }, '⋮⋮'),
+              React.createElement('div', {
+                key: 'recipe-name',
+                style: {
+                  fontSize: '0.875rem',
+                  fontWeight: 'bold',
+                  color: '#f1f5f9',
+                  marginBottom: '0.25rem'
+                }
+              }, plannedMeal.recipe.name),
+              React.createElement('button', {
+                key: 'remove',
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation()
+                  handleRemoveMeal(dateStr, mealSlot)
+                },
+                style: {
+                  padding: '0.25rem 0.5rem',
+                  background: '#7f1d1d',
+                  color: '#fca5a5',
+                  border: '1px solid #991b1b',
+                  borderRadius: '0.25rem',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }
+              }, 'Remove')
+            ] : [
+              React.createElement('div', {
+                key: 'empty',
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: '#64748b',
+                  fontSize: '0.875rem'
+                }
+              }, '+ Add meal')
+            ]
+          ])
+        })
+      ]).flat()
+    ]),
+
+    // Recipe Selection Modal
+    React.createElement(RecipeSelectionModal, {
+      key: 'recipe-modal',
+      isOpen: showRecipeModal,
+      onClose: () => setShowRecipeModal(false),
+      onSelectRecipe: handleRecipeSelect,
+      onAddNewRecipe: handleAddNewRecipe,
+      mealSlot: selectedSlot?.mealSlot || 'Breakfast',
+      date: selectedSlot?.date || ''
+    })
+  ])
+}

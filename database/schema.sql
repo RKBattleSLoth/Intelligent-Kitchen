@@ -179,47 +179,9 @@ CREATE TRIGGER update_grocery_list_items_updated_at BEFORE UPDATE ON grocery_lis
 CREATE TRIGGER update_nutrition_info_updated_at BEFORE UPDATE ON nutrition_info FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Create default admin user (password should be changed immediately)
--- Password: 'admin123' (hashed with bcrypt)
-INSERT INTO users (email, password_hash, first_name, last_name) 
-VALUES ('admin@intelligentkitchen.com', '$2a$10$rOZXp7mGXmHWK7vJtxB7uO5D3Q7J8Y.rKJ5L9nK8W7vJ8Y.rKJ5L9', 'Admin', 'User');
+-- Note: No default admin user is created for security reasons.
+-- Admin users should be created manually through the registration process
+-- and then granted admin privileges through database updates if needed.
 
--- Create sample recipe for testing
-INSERT INTO recipes (user_id, name, description, instructions, prep_time, cook_time, servings, meal_type) 
-VALUES (
-    (SELECT id FROM users WHERE email = 'admin@intelligentkitchen.com'),
-    'Simple Scrambled Eggs',
-    'Classic scrambled eggs perfect for breakfast',
-    '1. Crack eggs into a bowl and whisk with salt and pepper.
-2. Heat butter in a non-stick pan over medium heat.
-3. Pour in eggs and let sit for 20 seconds.
-4. Gently stir eggs until cooked to desired consistency.
-5. Serve hot.',
-    5, 5, 2, 'breakfast'
-);
-
--- Add ingredients for sample recipe
-INSERT INTO recipe_ingredients (recipe_id, name, quantity, unit)
-VALUES (
-    (SELECT id FROM recipes WHERE name = 'Simple Scrambled Eggs'),
-    'Eggs', 2, 'pieces'
-),
-(
-    (SELECT id FROM recipes WHERE name = 'Simple Scrambled Eggs'),
-    'Butter', 1, 'tablespoons'
-),
-(
-    (SELECT id FROM recipes WHERE name = 'Simple Scrambled Eggs'),
-    'Salt', 0.25, 'teaspoons'
-),
-(
-    (SELECT id FROM recipes WHERE name = 'Simple Scrambled Eggs'),
-    'Black Pepper', 0.25, 'teaspoons'
-);
-
--- Add nutritional information for sample recipe
-INSERT INTO nutrition_info (recipe_id, calories, protein, carbohydrates, fat)
-VALUES (
-    (SELECT id FROM recipes WHERE name = 'Simple Scrambled Eggs'),
-    180, 12, 2, 14
-);
+-- Sample data can be added through seed scripts or the application interface
+-- rather than being hardcoded in the schema for better security.

@@ -160,7 +160,7 @@ router.post('/chat/image', authenticateToken, upload.single('image'), [
       imageUrl,
     };
 
-    const response = await orchestrator.processRequest(message, context);
+    const response = await coordinator.execute(message, context);
 
     res.json({
       success: true,
@@ -279,7 +279,11 @@ router.post('/cache/clear', authenticateToken, async (req, res) => {
  * POST /api/ai/analyze-pantry
  * Analyze pantry and suggest recipes
  */
-router.post('/analyze-pantry', authenticateToken, async (req, res) => {
+router.post('/analyze-pantry', authenticateToken, [
+  body('preferences').optional().isString().isLength({ max: 1000 }),
+  body('constraints').optional().isString().isLength({ max: 1000 }),
+  handleValidationErrors
+], async (req, res) => {
   try {
     const { preferences, constraints } = req.body;
 
@@ -377,8 +381,11 @@ router.post('/generate-meal-plan', authenticateToken, [
  * Get recipe suggestions
  */
 router.post('/suggest-recipes', authenticateToken, [
-  body('query').optional().isString(),
-  body('ingredients').optional().isArray(),
+  body('query').optional().isString().isLength({ max: 500 }),
+  body('ingredients').optional().isArray({ max: 50 }),
+  body('ingredients.*').optional().isString().isLength({ max: 100 }),
+  body('diet').optional().isString().isLength({ max: 50 }),
+  body('maxTime').optional().isInt({ min: 1, max: 480 }),
   handleValidationErrors
 ], async (req, res) => {
   try {
@@ -495,8 +502,9 @@ router.get('/suggestions', authenticateToken, async (req, res) => {
  * Optimize grocery list by store layout or other criteria
  */
 router.post('/optimize-grocery-list', authenticateToken, [
-  body('listId').notEmpty().isString(),
+  body('listId').notEmpty().isUUID(),
   body('optimizeBy').optional().isIn(['store-layout', 'price', 'category']),
+  body('storeName').optional().isString().isLength({ max: 100 }),
   handleValidationErrors
 ], async (req, res) => {
   try {

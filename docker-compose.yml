@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: intelligent-kitchen-db
     environment:
-      POSTGRES_DB: intelligent_kitchen
-      POSTGRES_USER: kitchen_user
-      POSTGRES_PASSWORD: kitchen_password
+      POSTGRES_DB: ${POSTGRES_DB:-intelligent_kitchen}
+      POSTGRES_USER: ${POSTGRES_USER:-kitchen_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -35,12 +35,12 @@ services:
       dockerfile: Dockerfile
     container_name: intelligent-kitchen-backend
     environment:
-      NODE_ENV: production
-      PORT: 3001
-      DATABASE_URL: postgresql://kitchen_user:kitchen_password@postgres:5432/intelligent_kitchen
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3001}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kitchen_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-intelligent_kitchen}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
-      FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "3001:3001"
     depends_on:

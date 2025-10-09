@@ -7,10 +7,10 @@ const { handleValidationErrors } = require('../middleware/validation');
 const router = express.Router();
 
 // Get all meal plans for user
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
     
     const result = await query(
       `SELECT mp.id, mp.name, mp.start_date, mp.end_date, mp.notes, mp.created_at, mp.updated_at,
@@ -31,10 +31,10 @@ router.get('/', async (req, res) => {
 });
 
 // Get single meal plan with entries
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
     
     const mealPlanResult = await query(
       'SELECT id, name, start_date, end_date, notes, created_at, updated_at FROM meal_plans WHERE id = $1 AND user_id = $2',
@@ -71,7 +71,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create new meal plan
-router.post('/', [
+router.post('/', authenticateToken, [
   body('name').notEmpty().trim(),
   body('startDate').isISO8601(),
   body('endDate').isISO8601(),
@@ -80,8 +80,8 @@ router.post('/', [
   try {
     const { name, startDate, endDate, notes } = req.body;
     
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
 
     // Create dates at noon local time to avoid timezone issues
     const localStartDate = new Date(startDate + 'T12:00:00');
@@ -110,7 +110,7 @@ router.post('/', [
 });
 
 // Update meal plan
-router.put('/:id', [
+router.put('/:id', authenticateToken, [
   body('name').optional().notEmpty().trim(),
   body('startDate').optional().isISO8601(),
   body('endDate').optional().isISO8601(),
@@ -119,8 +119,8 @@ router.put('/:id', [
   try {
     const { name, startDate, endDate, notes } = req.body;
     
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
 
     // Check if meal plan exists and belongs to user
     const existingMealPlan = await query(
@@ -168,10 +168,10 @@ router.put('/:id', [
 });
 
 // Delete meal plan
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
     
     const result = await query(
       'DELETE FROM meal_plans WHERE id = $1 AND user_id = $2 RETURNING id',
@@ -190,7 +190,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Add meal entry to meal plan
-router.post('/:id/entries', [
+router.post('/:id/entries', authenticateToken, [
   body('mealDate').isISO8601(),
   body('mealType').isIn(['breakfast', 'lunch', 'dinner', 'snack', 'dessert']),
   handleValidationErrors
@@ -198,8 +198,8 @@ router.post('/:id/entries', [
   try {
     const { mealDate, mealType, recipeId, notes } = req.body;
     
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
 
     // Create date at noon local time to avoid timezone issues
     const localDate = new Date(mealDate + 'T12:00:00');
@@ -220,7 +220,12 @@ router.post('/:id/entries', [
     const startDateObj = new Date(mealPlan.start_date);
     const endDateObj = new Date(mealPlan.end_date);
 
-    if (localDate < startDateObj || localDate > endDateObj) {
+    // Compare dates without time component
+    const localDateOnly = new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate());
+    const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+    const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate());
+
+    if (localDateOnly < startDateOnly || localDateOnly > endDateOnly) {
       return res.status(400).json({ error: 'Meal date must be within meal plan date range' });
     }
 
@@ -264,15 +269,15 @@ router.post('/:id/entries', [
 });
 
 // Update meal entry
-router.put('/entries/:entryId', [
+router.put('/entries/:entryId', authenticateToken, [
   body('mealType').optional().isIn(['breakfast', 'lunch', 'dinner', 'snack', 'dessert']),
   handleValidationErrors
 ], async (req, res) => {
   try {
     const { mealDate, mealType, recipeId, notes } = req.body;
     
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
 
     // Check if entry exists and belongs to user's meal plan
     const entryResult = await query(
@@ -295,7 +300,12 @@ router.put('/entries/:entryId', [
       const startDateObj = new Date(entry.start_date);
       const endDateObj = new Date(entry.end_date);
 
-      if (mealDateObj < startDateObj || mealDateObj > endDateObj) {
+      // Compare dates without time component
+      const mealDateOnly = new Date(mealDateObj.getFullYear(), mealDateObj.getMonth(), mealDateObj.getDate());
+      const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+      const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate());
+
+      if (mealDateOnly < startDateOnly || mealDateOnly > endDateOnly) {
         return res.status(400).json({ error: 'Meal date must be within meal plan date range' });
       }
     }
@@ -335,10 +345,10 @@ router.put('/entries/:entryId', [
 });
 
 // Delete meal entry
-router.delete('/entries/:entryId', async (req, res) => {
+router.delete('/entries/:entryId', authenticateToken, async (req, res) => {
   try {
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
     const result = await query(
       `DELETE FROM meal_plan_entries 
        WHERE id = $1 AND 
@@ -359,12 +369,12 @@ router.delete('/entries/:entryId', async (req, res) => {
 });
 
 // Get meal plan for a specific date range
-router.get('/range/:startDate/:endDate', async (req, res) => {
+router.get('/range/:startDate/:endDate', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.params;
     
-    // MVP: Use hardcoded user ID instead of authentication
-    const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+    // Use authenticated user ID
+    const userId = req.user.id;
 
     // Create dates at noon local time to avoid timezone issues
     const localStartDate = new Date(startDate + 'T12:00:00');

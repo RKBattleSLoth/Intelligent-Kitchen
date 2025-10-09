@@ -17,8 +17,8 @@ const pool = new Pool({
   idleTimeoutMillis: 60000, // Increased to 60 seconds
   connectionTimeoutMillis: 10000, // Increased to 10 seconds for Railway
   
-  // SSL configuration required for Railway
-  ssl: process.env.DATABASE_URL ? {
+  // SSL configuration - disable for local development
+  ssl: process.env.NODE_ENV === 'production' ? {
     rejectUnauthorized: false
   } : false,
   
