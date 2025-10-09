@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/database');
+const { getEnvVar } = require('../config/env');
 
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -10,7 +11,12 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    const jwtSecret = getEnvVar('JWT_SECRET');
+    if (!jwtSecret) {
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    const decoded = jwt.verify(token, jwtSecret);
     
     // Get user from database
     const result = await query(
@@ -39,7 +45,13 @@ const optionalAuth = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    const jwtSecret = getEnvVar('JWT_SECRET');
+    if (!jwtSecret) {
+      req.user = null;
+      return next();
+    }
+
+    const decoded = jwt.verify(token, jwtSecret);
     
     const result = await query(
       'SELECT id, email, first_name, last_name, dietary_preference, health_goal FROM users WHERE id = $1',

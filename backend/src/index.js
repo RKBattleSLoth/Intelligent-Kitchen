@@ -5,9 +5,16 @@ const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const { runMigrations } = require('./database/migrate');
 const db = require('./config/database');
+const { initEnv } = require('./config/env');
 
 // Load environment variables
 dotenv.config();
+
+// Validate environment configuration
+if (!initEnv()) {
+  console.error('❌ Environment validation failed. Server cannot start.');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -81,7 +88,7 @@ app.use('/api/meal-plans', require('./controllers/mealPlanController'));
 app.use('/api/grocery-lists', require('./controllers/groceryController'));
 
 // AI routes (LLM-powered features)
-app.use('/api/ai', require('./routes/ai'));
+app.use('/api/ai', require('./routes/ai-minimal'));
 
 // Enhanced error handling middleware
 app.use((err, req, res, next) => {
