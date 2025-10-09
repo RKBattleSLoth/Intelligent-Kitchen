@@ -85,7 +85,7 @@ BACKEND_PID=$!
 cd ..
 
 # Wait for backend to be ready
-if wait_for_server "http://localhost:3002/health" "Backend Server"; then
+if wait_for_server "http://localhost:3001/health" "Backend Server"; then
     echo -e "${GREEN}✅ Backend server started successfully (PID: $BACKEND_PID)${NC}"
 else
     echo -e "${RED}❌ Backend server failed to start${NC}"
@@ -128,8 +128,8 @@ echo ""
 echo -e "${GREEN}🎉 Intelligent Kitchen Development Environment is Ready!${NC}"
 echo "=================================================="
 echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
-echo -e "${BLUE}Backend API:${NC} http://localhost:3002"
-echo -e "${BLUE}Backend Health:${NC} http://localhost:3002/health"
+echo -e "${BLUE}Backend API:${NC} http://localhost:3001"
+echo -e "${BLUE}Backend Health:${NC} http://localhost:3001/health"
 echo ""
 echo -e "${YELLOW}Process IDs:${NC}"
 echo -e "  Backend: $BACKEND_PID"

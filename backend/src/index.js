@@ -87,8 +87,8 @@ app.use('/api/recipes', require('./controllers/recipeController'));
 app.use('/api/meal-plans', require('./controllers/mealPlanController'));
 app.use('/api/grocery-lists', require('./controllers/groceryController'));
 
-// AI routes (LLM-powered features)
-app.use('/api/ai', require('./routes/ai-minimal'));
+// AI routes (LLM-powered features) - temporarily disabled
+// app.use('/api/ai', require('./routes/ai'));
 
 // Enhanced error handling middleware
 app.use((err, req, res, next) => {
