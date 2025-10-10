@@ -1,91 +1,92 @@
-import axios from 'axios';
+import { ShoppingListItem } from '../types/shoppingList';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const STORAGE_KEY = 'intelligent-kitchen-shopping-list';
 
-export interface ShoppingListItem {
-  id: string;
-  item_text: string;
-  is_checked: boolean;
-  position: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ShoppingList {
-  id: string;
-  user_id: string;
-  name: string;
-  is_completed: boolean;
-  created_at: string;
-  updated_at: string;
-  items?: ShoppingListItem[];
-}
-
-const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/shopping-lists`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+class ShoppingListService {
+  private getItems(): ShoppingListItem[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
   }
-  return config;
-});
 
-export const shoppingListService = {
-  // Get all shopping lists
-  async getShoppingLists(): Promise<ShoppingList[]> {
-    const response = await api.get('/');
-    return response.data.data;
-  },
+  private saveItems(items: ShoppingListItem[]): void {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
 
-  // Get a single shopping list with items
-  async getShoppingList(id: string): Promise<ShoppingList> {
-    const response = await api.get(`/${id}`);
-    return response.data.data;
-  },
+  private generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
 
-  // Create a new shopping list
-  async createShoppingList(name: string): Promise<ShoppingList> {
-    const response = await api.post('/', { name });
-    return response.data.data;
-  },
+  async getShoppingListItems(): Promise<ShoppingListItem[]> {
+    return this.getItems();
+  }
 
-  // Update a shopping list
-  async updateShoppingList(id: string, updates: Partial<ShoppingList>): Promise<ShoppingList> {
-    const response = await api.put(`/${id}`, updates);
-    return response.data.data;
-  },
+  async addShoppingListItem(itemText: string): Promise<ShoppingListItem> {
+    const items = this.getItems();
+    const newItem: ShoppingListItem = {
+      id: this.generateId(),
+      item_text: itemText.trim(),
+      is_checked: false,
+      position: items.length,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    items.push(newItem);
+    this.saveItems(items);
+    return newItem;
+  }
 
-  // Delete a shopping list
-  async deleteShoppingList(id: string): Promise<void> {
-    await api.delete(`/${id}`);
-  },
+  async updateShoppingListItem(itemId: string, updates: Partial<ShoppingListItem>): Promise<ShoppingListItem> {
+    const items = this.getItems();
+    const itemIndex = items.findIndex(item => item.id === itemId);
+    
+    if (itemIndex === -1) {
+      throw new Error('Item not found');
+    }
+    
+    items[itemIndex] = {
+      ...items[itemIndex],
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    
+    this.saveItems(items);
+    return items[itemIndex];
+  }
 
-  // Add an item to a shopping list
-  async addShoppingListItem(listId: string, itemText: string): Promise<ShoppingListItem> {
-    const response = await api.post(`/${listId}/items`, { item_text: itemText });
-    return response.data.data;
-  },
+  async deleteShoppingListItem(itemId: string): Promise<void> {
+    const items = this.getItems();
+    const filteredItems = items.filter(item => item.id !== itemId);
+    this.saveItems(filteredItems);
+  }
 
-  // Update a shopping list item
-  async updateShoppingListItem(listId: string, itemId: string, updates: Partial<ShoppingListItem>): Promise<ShoppingListItem> {
-    const response = await api.put(`/${listId}/items/${itemId}`, updates);
-    return response.data.data;
-  },
+  async clearCompletedItems(): Promise<void> {
+    const items = this.getItems();
+    const activeItems = items.filter(item => !item.is_checked);
+    this.saveItems(activeItems);
+  }
 
-  // Delete a shopping list item
-  async deleteShoppingListItem(listId: string, itemId: string): Promise<void> {
-    await api.delete(`/${listId}/items/${itemId}`);
-  },
+  async reorderItems(itemIds: string[]): Promise<void> {
+    const items = this.getItems();
+    const reorderedItems: ShoppingListItem[] = [];
+    
+    itemIds.forEach((id, index) => {
+      const item = items.find(i => i.id === id);
+      if (item) {
+        reorderedItems.push({
+          ...item,
+          position: index,
+          updated_at: new Date().toISOString()
+        });
+      }
+    });
+    
+    this.saveItems(reorderedItems);
+  }
+}
 
-  // Reorder shopping list items
-  async reorderShoppingListItems(listId: string, itemIds: string[]): Promise<void> {
-    await api.put(`/${listId}/items/reorder`, { itemIds });
-  },
-};
+export const shoppingListService = new ShoppingListService();
