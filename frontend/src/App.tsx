@@ -4,6 +4,7 @@ import { Recipe } from './types/recipe'
 import { RecipeList } from './components/recipes/RecipeList'
 import { RecipeForm } from './components/recipes/RecipeForm'
 import { MealPlanningPage } from './pages/meal-planning/MealPlanningPage'
+import { ShoppingListPage } from './pages/shopping-lists/ShoppingListPage'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
@@ -75,7 +76,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               borderRadius: '0.25rem',
               background: location.pathname === '/meal-planning' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
             }
-          }, 'Meal Planning')
+          }, 'Meal Planning'),
+          React.createElement(Link, {
+            key: 'shopping-lists',
+            to: '/shopping-lists',
+            style: {
+              color: location.pathname === '/shopping-lists' ? '#60a5fa' : 'white',
+              textDecoration: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.25rem',
+              background: location.pathname === '/shopping-lists' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
+            }
+          }, 'Shopping Lists')
         ])
       ])
     ]),
@@ -238,15 +250,9 @@ function App() {
       element: React.createElement(Layout, null, React.createElement(MealPlanningPage))
     }),
     React.createElement(Route, {
-      key: 'grocery-lists',
-      path: '/grocery-lists',
-      element: React.createElement(Layout, null,
-        React.createElement(PlaceholderPage, {
-          title: 'Grocery Lists',
-          description: 'Create and manage shopping lists based on your meal plans and pantry needs.',
-          emoji: '🛒'
-        })
-      )
+      key: 'shopping-lists',
+      path: '/shopping-lists',
+      element: React.createElement(Layout, null, React.createElement(ShoppingListPage))
     })
   ])
 }
