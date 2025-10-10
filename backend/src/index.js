@@ -22,7 +22,33 @@ const PORT = process.env.PORT || 3001;
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allowed origins
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001'
+    ];
+    
+    if (process.env.NODE_ENV === 'development') {
+      // In development, allow all localhost origins
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true);
+      }
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+  },
   credentials: true
 }));
 
@@ -87,8 +113,8 @@ app.use('/api/recipes', require('./controllers/recipeController'));
 app.use('/api/meal-plans', require('./controllers/mealPlanController'));
 app.use('/api/grocery-lists', require('./controllers/groceryController'));
 
-// AI routes (LLM-powered features) - temporarily disabled
-// app.use('/api/ai', require('./routes/ai'));
+// AI routes (LLM-powered features)
+app.use('/api/ai', require('./routes/ai'));
 
 // Enhanced error handling middleware
 app.use((err, req, res, next) => {
