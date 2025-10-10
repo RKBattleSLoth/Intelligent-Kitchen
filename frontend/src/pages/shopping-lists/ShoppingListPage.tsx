@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { shoppingListService, ShoppingListItem } from '../../services/shoppingListService';
+import { aiService, IngredientExtractionResult } from '../../services/aiService';
+import { recipeService, Recipe } from '../../services/recipeService';
 
 interface ShoppingListPageProps {}
 
@@ -8,10 +10,20 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newItemText, setNewItemText] = useState('');
+  
+  // AI-related states
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showRecipeSelector, setShowRecipeSelector] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string>('checking');
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [selectedRecipes, setSelectedRecipes] = useState<string[]>([]);
 
-  // Load shopping list on component mount
+  // Load shopping list and recipes on component mount
   useEffect(() => {
     loadShoppingList();
+    loadRecipes();
+    checkAIStatus();
   }, []);
 
   const loadShoppingList = async () => {
@@ -25,6 +37,27 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
       console.error('Error loading shopping list:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRecipes = async () => {
+    try {
+      const recipeList = await recipeService.getAllRecipes();
+      setRecipes(recipeList);
+    } catch (err) {
+      console.error('Error loading recipes:', err);
+    }
+  };
+
+  // Check if AI is configured and available
+  const checkAIStatus = async () => {
+    try {
+      const isConfigured = await aiService.isConfigured();
+      setAiEnabled(isConfigured);
+      setAiStatus(isConfigured ? 'ready' : 'not_configured');
+    } catch (error) {
+      setAiEnabled(false);
+      setAiStatus('error');
     }
   };
 
@@ -96,6 +129,97 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }
   };
 
+  // AI Functions
+  const addRecipeIngredients = async (recipeId: string) => {
+    try {
+      setAiLoading(true);
+      setError(null);
+      
+      const recipe = await recipeService.getRecipeById(recipeId);
+      if (!recipe) {
+        setError('Recipe not found');
+        return;
+      }
+      
+      // Extract ingredients using AI
+      const result: IngredientExtractionResult = await aiService.extractIngredientsFromRecipe({
+        id: recipe.id,
+        name: recipe.name,
+        instructions: recipe.instructions
+      });
+      
+      if (result.success && result.ingredients.length > 0) {
+        // Add extracted ingredients to shopping list
+        const newItems: ShoppingListItem[] = [];
+        for (const ingredient of result.ingredients) {
+          const itemText = ingredient.amount && ingredient.unit 
+            ? `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`
+            : ingredient.name;
+          
+          try {
+            const newItem = await shoppingListService.addShoppingListItem(itemText);
+            newItems.push(newItem);
+          } catch (err) {
+            console.error('Failed to add ingredient:', err);
+          }
+        }
+        
+        setItems([...items, ...newItems]);
+        setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
+      } else {
+        // Fallback to basic ingredient extraction
+        const basicIngredients = recipeService.extractIngredients(recipe.instructions);
+        if (basicIngredients.length > 0) {
+          const newItems: ShoppingListItem[] = [];
+          for (const ingredient of basicIngredients) {
+            try {
+              const newItem = await shoppingListService.addShoppingListItem(ingredient);
+              newItems.push(newItem);
+            } catch (err) {
+              console.error('Failed to add ingredient:', err);
+            }
+          }
+          setItems([...items, ...newItems]);
+          setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
+        } else {
+          setError(result.error || 'No ingredients found in recipe');
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to add recipe ingredients');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const addMultipleRecipeIngredients = async () => {
+    if (selectedRecipes.length === 0) return;
+    
+    try {
+      setAiLoading(true);
+      setError(null);
+      
+      for (const recipeId of selectedRecipes) {
+        await addRecipeIngredients(recipeId);
+      }
+      
+      setShowRecipeSelector(false);
+      setSelectedRecipes([]);
+    } catch (err: any) {
+      setError(err.message || 'Failed to add recipe ingredients');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const toggleRecipeSelection = (recipeId: string) => {
+    setSelectedRecipes(prev => 
+      prev.includes(recipeId) 
+        ? prev.filter(id => id !== recipeId)
+        : [...prev, recipeId]
+    );
+  };
+
   if (loading) {
     return React.createElement('div', {
       style: { 
@@ -119,29 +243,234 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         marginBottom: '2rem' 
       }
     }, [
-      React.createElement('h1', {
-        key: 'title',
-        style: { 
-          fontSize: '2rem', 
-          fontWeight: 'bold', 
-          color: '#f1f5f9',
-          margin: 0
-        }
-      }, '🛒 Shopping List'),
+      React.createElement('div', {
+        key: 'title-section',
+        style: { display: 'flex', flexDirection: 'column', gap: '0.5rem' }
+      }, [
+        React.createElement('h1', {
+          key: 'title',
+          style: { 
+            fontSize: '2rem', 
+            fontWeight: 'bold', 
+            color: '#f1f5f9',
+            margin: 0
+          }
+        }, '🛒 Shopping List'),
+        
+        // AI Status Indicator
+        aiEnabled && React.createElement('div', {
+          key: 'ai-status',
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.875rem',
+            color: '#10b981'
+          }
+        }, [
+          React.createElement('span', { key: 'ai-dot' }, '🤖'),
+          React.createElement('span', { key: 'ai-text' }, 'AI Recipe Integration Available')
+        ])
+      ]),
       
-      items.some(item => item.is_checked) && React.createElement('button', {
-        key: 'clear-btn',
-        onClick: clearCompleted,
+      React.createElement('div', {
+        key: 'header-buttons',
+        style: { display: 'flex', gap: '0.5rem' }
+      }, [
+        // Add Recipe Ingredients Button
+        aiEnabled && React.createElement('button', {
+          key: 'recipe-btn',
+          onClick: () => setShowRecipeSelector(!showRecipeSelector),
+          style: {
+            background: showRecipeSelector ? '#8b5cf6' : '#6366f1',
+            color: 'white',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }
+        }, ['🍳', showRecipeSelector ? 'Hide Recipes' : 'Add Recipe Ingredients']),
+        
+        // Clear Completed Button
+        items.some(item => item.is_checked) && React.createElement('button', {
+          key: 'clear-btn',
+          onClick: clearCompleted,
+          style: {
+            background: '#ef4444',
+            color: 'white',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: '0.875rem'
+          }
+        }, 'Clear Completed')
+      ])
+    ]),
+
+    // Recipe Selector Panel
+    showRecipeSelector && React.createElement('div', {
+      key: 'recipe-selector',
+      style: {
+        background: '#1e293b',
+        borderRadius: '0.5rem',
+        padding: '1.5rem',
+        marginBottom: '1rem',
+        border: '2px solid #6366f1'
+      }
+    }, [
+      React.createElement('h3', {
+        key: 'recipe-title',
         style: {
-          background: '#ef4444',
-          color: 'white',
-          border: 'none',
-          padding: '0.5rem 1rem',
-          borderRadius: '0.375rem',
-          cursor: 'pointer',
-          fontSize: '0.875rem'
+          fontSize: '1.25rem',
+          fontWeight: 'bold',
+          color: '#f1f5f9',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
         }
-      }, 'Clear Completed')
+      }, ['🍳', 'Select Recipes to Add Ingredients']),
+      
+      React.createElement('div', {
+        key: 'recipe-list',
+        style: {
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: '1rem',
+          marginBottom: '1rem'
+        }
+      }, 
+        recipes.map(recipe =>
+          React.createElement('div', {
+            key: recipe.id,
+            style: {
+              background: selectedRecipes.includes(recipe.id) ? '#312e81' : '#0f172a',
+              border: `2px solid ${selectedRecipes.includes(recipe.id) ? '#6366f1' : '#475569'}`,
+              borderRadius: '0.5rem',
+              padding: '1rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            },
+            onClick: () => toggleRecipeSelection(recipe.id)
+          }, [
+            React.createElement('div', {
+              key: 'recipe-header',
+              style: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem'
+              }
+            }, [
+              React.createElement('h4', {
+                key: 'recipe-name',
+                style: {
+                  color: '#f1f5f9',
+                  margin: 0,
+                  fontSize: '1rem',
+                  fontWeight: 'bold'
+                }
+              }, recipe.name),
+              
+              React.createElement('input', {
+                key: 'recipe-checkbox',
+                type: 'checkbox',
+                checked: selectedRecipes.includes(recipe.id),
+                onChange: () => {},
+                style: {
+                  width: '1.25rem',
+                  height: '1.25rem',
+                  cursor: 'pointer',
+                  accentColor: '#6366f1'
+                }
+              })
+            ]),
+            
+            React.createElement('div', {
+              key: 'recipe-category',
+              style: {
+                color: '#94a3b8',
+                fontSize: '0.875rem',
+                marginBottom: '0.5rem'
+              }
+            }, recipe.category),
+            
+            React.createElement('div', {
+              key: 'recipe-preview',
+              style: {
+                color: '#64748b',
+                fontSize: '0.75rem',
+                lineHeight: '1.4'
+              }
+            }, recipe.instructions.substring(0, 100) + '...')
+          ])
+        )
+      ),
+      
+      React.createElement('div', {
+        key: 'recipe-actions',
+        style: {
+          display: 'flex',
+          gap: '0.5rem',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderTop: '1px solid #334155',
+          paddingTop: '1rem'
+        }
+      }, [
+        React.createElement('span', {
+          key: 'selection-count',
+          style: {
+            color: '#94a3b8',
+            fontSize: '0.875rem'
+          }
+        }, `${selectedRecipes.length} recipe${selectedRecipes.length !== 1 ? 's' : ''} selected`),
+        
+        React.createElement('div', {
+          key: 'action-buttons',
+          style: { display: 'flex', gap: '0.5rem' }
+        }, [
+          React.createElement('button', {
+            key: 'cancel-btn',
+            onClick: () => {
+              setShowRecipeSelector(false);
+              setSelectedRecipes([]);
+            },
+            style: {
+              background: '#64748b',
+              color: 'white',
+              border: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            }
+          }, 'Cancel'),
+          
+          React.createElement('button', {
+            key: 'add-ingredients-btn',
+            onClick: addMultipleRecipeIngredients,
+            disabled: aiLoading || selectedRecipes.length === 0,
+            style: {
+              background: aiLoading || selectedRecipes.length === 0 ? '#475569' : '#10b981',
+              color: 'white',
+              border: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.375rem',
+              cursor: aiLoading || selectedRecipes.length === 0 ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }
+          }, [aiLoading ? '⏳' : '🛒', aiLoading ? 'Processing...' : `Add Ingredients (${selectedRecipes.length})`])
+        ])
+      ])
     ]),
 
     // Error message
@@ -326,7 +655,10 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
               React.createElement('p', {
                 key: 'empty-desc',
                 style: { color: '#64748b' }
-              }, 'Add items above to get started!')
+              }, aiEnabled 
+                ? 'Add items manually or select recipes to add ingredients automatically!'
+                : 'Add items above to get started!'
+              )
             ])
       ),
 
