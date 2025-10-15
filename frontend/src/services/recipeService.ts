@@ -73,6 +73,39 @@ class RecipeService {
     return newRecipe
   }
 
+  async importRecipeFromUrl(url: string, category: RecipeCategory = 'Dinner'): Promise<Recipe> {
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl) {
+      throw new Error('Recipe URL is required')
+    }
+
+    const result = await aiService.extractRecipeFromUrl(trimmedUrl)
+    if (!result.success || !result.recipe) {
+      throw new Error(result.error || 'Failed to import recipe from URL')
+    }
+
+    const { recipe } = result
+    const instructions = (recipe.instructionsText && recipe.instructionsText.trim().length > 0)
+      ? recipe.instructionsText.trim()
+      : RecipeService.composeInstructions(recipe.ingredients || [], recipe.directions || [])
+
+    const now = new Date().toISOString()
+    const newRecipe: Recipe = {
+      id: Date.now().toString(),
+      name: recipe.title || 'Imported Recipe',
+      category,
+      instructions: recipe.sourceUrl ? `${instructions}\n\nSource: ${recipe.sourceUrl}` : instructions,
+      createdAt: now,
+      updatedAt: now
+    }
+
+    const recipes = this.getRecipes()
+    recipes.push(newRecipe)
+    this.saveRecipes(recipes)
+
+    return newRecipe
+  }
+
   async updateRecipe(id: string, data: Partial<RecipeFormData>): Promise<Recipe | null> {
     const recipes = this.getRecipes()
     const index = recipes.findIndex(recipe => recipe.id === id)
@@ -169,6 +202,29 @@ class RecipeService {
     }
     
     return ingredients
+  }
+
+  private static composeInstructions(ingredients: string[], directions: string[]): string {
+    const lines: string[] = []
+    const trimmedIngredients = ingredients.map(item => item.trim()).filter(Boolean)
+    const trimmedDirections = directions.map(item => item.trim()).filter(Boolean)
+
+    if (trimmedIngredients.length) {
+      lines.push('Ingredients:')
+      trimmedIngredients.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item}`)
+      })
+      lines.push('')
+    }
+
+    if (trimmedDirections.length) {
+      lines.push('Directions:')
+      trimmedDirections.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item}`)
+      })
+    }
+
+    return lines.join('\n').trim()
   }
 }
 

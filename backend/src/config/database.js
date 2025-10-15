@@ -1,6 +1,8 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+const isTestEnv = process.env.NODE_ENV === 'test';
+
 // Enhanced database configuration for Railway PostgreSQL
 const pool = new Pool({
   // Use DATABASE_URL if available, otherwise individual variables
@@ -45,8 +47,10 @@ async function checkDatabaseHealth() {
     lastHealthCheck = new Date();
     connectionRetryCount = 0;
     
-    console.log('✅ Database health check passed at', lastHealthCheck.toISOString());
-    console.log('📊 PostgreSQL:', result.rows[0].version.split(',')[0]);
+    if (!isTestEnv) {
+      console.log('✅ Database health check passed at', lastHealthCheck.toISOString());
+      console.log('📊 PostgreSQL:', result.rows[0].version.split(',')[0]);
+    }
     
     return true;
   } catch (error) {
@@ -58,27 +62,37 @@ async function checkDatabaseHealth() {
 
 // Initial connection test with retry logic
 async function initializeDatabase() {
-  console.log('🔧 Initializing database connection...');
+  if (!isTestEnv) {
+    console.log('🔧 Initializing database connection...');
+  }
   
   for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
       await checkDatabaseHealth();
       if (isHealthy) {
-        console.log('✅ Database initialized successfully');
+        if (!isTestEnv) {
+          console.log('✅ Database initialized successfully');
+        }
         return;
       }
     } catch (error) {
-      console.error(`❌ Database initialization attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed:`, error.message);
+      if (!isTestEnv) {
+        console.error(`❌ Database initialization attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed:`, error.message);
+      }
       
       if (attempt < MAX_RETRY_ATTEMPTS) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff
-        console.log(`🔄 Retrying in ${delay}ms...`);
+        if (!isTestEnv) {
+          console.log(`🔄 Retrying in ${delay}ms...`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
   
-  console.error('💥 Failed to initialize database after maximum attempts');
+  if (!isTestEnv) {
+    console.error('💥 Failed to initialize database after maximum attempts');
+  }
   throw new Error('Database initialization failed');
 }
 
@@ -99,28 +113,36 @@ async function queryWithRetry(text, params, retryCount = 0) {
 }
 
 // Graceful shutdown handler
-process.on('SIGINT', async () => {
-  console.log('🛑 Shutting down database connection pool...');
-  await pool.end();
-  console.log('✅ Database connections closed');
-  process.exit(0);
-});
+if (!isTestEnv) {
+  process.on('SIGINT', async () => {
+    console.log('🛑 Shutting down database connection pool...');
+    await pool.end();
+    console.log('✅ Database connections closed');
+    process.exit(0);
+  });
 
-process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, shutting down database connection pool...');
-  await pool.end();
-  console.log('✅ Database connections closed');
-  process.exit(0);
-});
+  process.on('SIGTERM', async () => {
+    console.log('🛑 Received SIGTERM, shutting down database connection pool...');
+    await pool.end();
+    console.log('✅ Database connections closed');
+    process.exit(0);
+  });
+}
 
 // Initialize database
 initializeDatabase().catch(error => {
-  console.error('💥 Failed to start database:', error);
-  process.exit(1);
+  if (!isTestEnv) {
+    console.error('💥 Failed to start database:', error);
+    process.exit(1);
+  } else {
+    console.error('💥 Failed to start database:', error.message);
+  }
 });
 
-// Set up periodic health checks
-setInterval(checkDatabaseHealth, 300000); // Check every 5 minutes
+if (!isTestEnv) {
+  // Set up periodic health checks outside of test environment
+  setInterval(checkDatabaseHealth, 300000); // Check every 5 minutes
+}
 
 module.exports = {
   query: queryWithRetry,

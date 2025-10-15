@@ -6,6 +6,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const RecipeAgent = require('../services/ai/agents/RecipeAgent');
+const RecipeUrlExtractor = require('../services/ai/RecipeUrlExtractor');
 const RequestRouter = require('../services/ai/RequestRouter');
 const ResponseCache = require('../services/ai/ResponseCache');
 
@@ -13,6 +14,7 @@ const router = express.Router();
 
 // Initialize only essential services
 const recipeAgent = new RecipeAgent();
+const recipeUrlExtractor = new RecipeUrlExtractor();
 const requestRouter = new RequestRouter();
 const responseCache = new ResponseCache();
 
@@ -45,6 +47,55 @@ router.get('/health', async (req, res) => {
     res.status(500).json({
       status: 'error',
       error: error.message
+    });
+  }
+});
+
+router.post('/extract-recipe-from-url', [
+  body('url').isURL({ require_protocol: true }).withMessage('Valid recipe URL is required')
+], async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: errors.array()
+      });
+    }
+
+    const { url } = req.body;
+    const userId = req.user.id;
+
+    console.log(`API: Importing recipe from URL ${url}`);
+
+    const result = await recipeUrlExtractor.extract(url, { userId });
+
+    res.json({
+      success: true,
+      recipe: {
+        title: result.title,
+        description: result.description,
+        ingredients: result.ingredients,
+        directions: result.directions,
+        instructionsText: result.instructionsText,
+        servings: result.servings,
+        prepTimeMinutes: result.prepTimeMinutes,
+        cookTimeMinutes: result.cookTimeMinutes,
+        totalTimeMinutes: result.totalTimeMinutes,
+        sourceUrl: result.sourceUrl
+      },
+      ingredientExtraction: result.ingredientExtraction,
+      aiMetadata: result.aiMetadata,
+      structuredData: result.structuredData,
+      processingTimeMs: Date.now() - startedAt
+    });
+  } catch (error) {
+    console.error('Recipe URL extraction error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to extract recipe from URL'
     });
   }
 });

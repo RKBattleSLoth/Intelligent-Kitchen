@@ -75,6 +75,27 @@ export interface CostUsage {
   };
 }
 
+export interface RecipeUrlExtractionResult {
+  success: boolean;
+  recipe?: {
+    title: string;
+    description: string;
+    ingredients: string[];
+    directions: string[];
+    instructionsText: string;
+    servings: string | null;
+    prepTimeMinutes: number | null;
+    cookTimeMinutes: number | null;
+    totalTimeMinutes: number | null;
+    sourceUrl: string;
+  };
+  ingredientExtraction?: any;
+  aiMetadata?: any;
+  structuredData?: any;
+  processingTimeMs?: number;
+  error?: string;
+}
+
 class AIService {
   private baseURL: string;
 
@@ -157,6 +178,19 @@ class AIService {
         success: false,
         ingredients: [],
         error: error.response?.data?.error || 'Failed to extract ingredients from recipe'
+      };
+    }
+  }
+
+  async extractRecipeFromUrl(url: string): Promise<RecipeUrlExtractionResult> {
+    try {
+      const response = await axios.post(`${this.baseURL}/extract-recipe-from-url`, { url });
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to extract recipe from URL:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to extract recipe from URL'
       };
     }
   }

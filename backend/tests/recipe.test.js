@@ -1,3 +1,6 @@
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_recipes_1234567890_secure';
+
 const request = require('supertest');
 const express = require('express');
 const { query, pool } = require('../src/config/database');
@@ -10,12 +13,26 @@ app.use('/api/recipes', recipeRoutes);
 
 // Test data
 const testUserId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
+const testUser = {
+  id: testUserId,
+  email: 'test-user@example.com',
+  passwordHash: '$2b$10$CwTycUXWue0Thq9StjUM0uJ8K3uGNJ4G/2Fne5DE5F.hyp7fZC.W.', // bcrypt hash for 'password'
+  firstName: 'Test',
+  lastName: 'User'
+};
 
 describe('Recipe API', () => {
   let recipeId;
   let publicRecipeId;
 
   beforeAll(async () => {
+    await query(
+      `INSERT INTO users (id, email, password_hash, first_name, last_name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [testUser.id, testUser.email, testUser.passwordHash, testUser.firstName, testUser.lastName]
+    );
+
     // Clean up any existing test data
     await query('DELETE FROM recipe_ingredients WHERE recipe_id IN (SELECT id FROM recipes WHERE user_id = $1 AND name LIKE $2)', [testUserId, 'Test%']);
     await query('DELETE FROM nutrition_info WHERE recipe_id IN (SELECT id FROM recipes WHERE user_id = $1 AND name LIKE $2)', [testUserId, 'Test%']);
@@ -27,6 +44,7 @@ describe('Recipe API', () => {
     await query('DELETE FROM recipe_ingredients WHERE recipe_id IN (SELECT id FROM recipes WHERE user_id = $1 AND name LIKE $2)', [testUserId, 'Test%']);
     await query('DELETE FROM nutrition_info WHERE recipe_id IN (SELECT id FROM recipes WHERE user_id = $1 AND name LIKE $2)', [testUserId, 'Test%']);
     await query('DELETE FROM recipes WHERE user_id = $1 AND name LIKE $2', [testUserId, 'Test%']);
+    await query('DELETE FROM users WHERE id = $1', [testUserId]);
     await pool.end();
   });
 

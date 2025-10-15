@@ -22,6 +22,7 @@ const optionalEnvVars = {
   'OPENROUTER_MODEL_SMALL': 'google/gemma-2-9b-it',
   'OPENROUTER_MODEL_MEDIUM': 'anthropic/claude-3.5-sonnet',
   'OPENROUTER_MODEL_LARGE': 'google/gemini-1.5-pro',
+  'OPENROUTER_RECIPE_URL_MODEL': 'anthropic/claude-3-5-haiku',
   'AI_ENABLE_CACHING': 'true',
   'AI_CACHE_TTL': '3600',
   'AI_MAX_RETRIES': '3',

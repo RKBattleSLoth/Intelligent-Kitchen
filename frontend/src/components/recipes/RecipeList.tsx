@@ -24,6 +24,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory | 'All'>('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isImporting, setIsImporting] = useState(false)
 
   useEffect(() => {
     loadRecipes()
@@ -75,6 +76,23 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
 
   const getCategoryColor = (category: RecipeCategory) => CATEGORY_COLORS[category]
 
+  const handleImportFromUrl = async () => {
+    const url = prompt('Enter the recipe URL to import:')
+    if (!url) return
+
+    setIsImporting(true)
+    try {
+      const importedRecipe = await recipeService.importRecipeFromUrl(url)
+      setRecipes(prev => [...prev, importedRecipe])
+      alert(`Imported "${importedRecipe.name}" successfully!`)
+    } catch (error: any) {
+      console.error('Error importing recipe:', error)
+      alert(error?.message || 'Failed to import recipe')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   if (loading) {
     return React.createElement('div', {
       style: { textAlign: 'center', padding: '2rem' }
@@ -98,20 +116,43 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
         key: 'title',
         style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
       }, `Recipes (${filteredRecipes.length})`),
-      
-      React.createElement('button', {
-        key: 'add-btn',
-        onClick: onAdd,
+      React.createElement('div', {
+        key: 'actions',
         style: {
-          background: '#3b82f6',
-          color: 'white',
-          border: 'none',
-          padding: '0.75rem 1.5rem',
-          borderRadius: '0.375rem',
-          fontSize: '1rem',
-          cursor: 'pointer'
+          display: 'flex',
+          gap: '0.75rem',
+          flexWrap: 'wrap'
         }
-      }, '+ Add Recipe')
+      }, [
+        React.createElement('button', {
+          key: 'add-btn',
+          onClick: onAdd,
+          style: {
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 1.5rem',
+            borderRadius: '0.375rem',
+            fontSize: '1rem',
+            cursor: 'pointer'
+          }
+        }, '+ Add Recipe'),
+        React.createElement('button', {
+          key: 'import-btn',
+          onClick: handleImportFromUrl,
+          disabled: isImporting,
+          style: {
+            background: '#0d9488',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 1.5rem',
+            borderRadius: '0.375rem',
+            fontSize: '1rem',
+            cursor: isImporting ? 'not-allowed' : 'pointer',
+            opacity: isImporting ? 0.6 : 1
+          }
+        }, isImporting ? 'Importing...' : 'Import from URL')
+      ])
     ]),
 
     // Search and filters
