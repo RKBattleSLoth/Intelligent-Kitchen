@@ -36,9 +36,13 @@ class RequestRouter {
    * Route request to appropriate model based on task type and complexity
    */
   async route(taskType, input, options = {}) {
-    const { forceModel, priority = 'normal' } = options;
+    const { forceModel, forceModelName, priority = 'normal' } = options;
+
+    if (forceModelName) {
+      return this.executeRequestByName(forceModelName, taskType, input, options);
+    }
     
-    // If forceModel is specified, use it directly
+    // If forceModel tier is specified, use it directly
     if (forceModel && this.models[forceModel]) {
       return this.executeRequest(forceModel, taskType, input, options);
     }
@@ -51,6 +55,32 @@ class RequestRouter {
     return this.executeRequest(recommendedModel, taskType, input, options);
   }
 
+  async executeRequestByName(modelName, taskType, input, options = {}) {
+    if (!modelName) {
+      throw new Error('Model name is required for executeRequestByName');
+    }
+
+    const messages = this.prepareMessages(taskType, input, options);
+
+    const result = await this.client.chat(messages, {
+      model: modelName,
+      maxTokens: options.maxTokens || 4000,
+      temperature: options.temperature || this.getTemperatureForTask(taskType),
+      stream: options.stream || false
+    });
+
+    return {
+      ...result,
+      routing: {
+        modelTier: 'custom',
+        modelName,
+        taskType,
+        complexity: this.assessComplexity(taskType, input),
+        costMultiplier: null
+      }
+    };
+  }
+
   /**
    * Select the best model for the given task
    */
@@ -61,7 +91,9 @@ class RequestRouter {
     const taskRouting = {
       'simple_text': 'small',
       'basic_parsing': 'small',
-      'ingredient_extraction': 'medium',
+      'ingredient_extraction': 'small',
+      'smart_processing': 'small',
+      'validation': 'small',
       'recipe_analysis': 'medium',
       'meal_plan_generation': 'large',
       'vision_analysis': 'large',
@@ -70,11 +102,15 @@ class RequestRouter {
 
     let recommendedModel = taskRouting[taskType] || 'medium';
 
-    // Adjust based on complexity
-    if (complexity === 'high' && recommendedModel === 'small') {
-      recommendedModel = 'medium';
-    } else if (complexity === 'very_high' && recommendedModel !== 'large') {
-      recommendedModel = 'large';
+    const stickToSmallTasks = new Set(['ingredient_extraction', 'smart_processing', 'validation']);
+
+    // Adjust based on complexity for tasks that can scale
+    if (!stickToSmallTasks.has(taskType)) {
+      if (complexity === 'high' && recommendedModel === 'small') {
+        recommendedModel = 'medium';
+      } else if (complexity === 'very_high' && recommendedModel !== 'large') {
+        recommendedModel = 'large';
+      }
     }
 
     // Adjust based on priority
@@ -167,10 +203,10 @@ class RequestRouter {
     const systemPrompt = systemPrompts[taskType] || systemPrompts['simple_text'];
     
     let userContent;
-    if (typeof input === 'string') {
-      userContent = input;
-    } else if (options.prompt) {
+    if (options.prompt) {
       userContent = options.prompt;
+    } else if (typeof input === 'string') {
+      userContent = input;
     } else {
       userContent = JSON.stringify(input, null, 2);
     }

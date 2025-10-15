@@ -55,6 +55,43 @@ class SmartProcessingAgent {
       'add', 'mix', 'combine', 'stir', 'fold', 'whisk', 'beat', 'pour', 'sprinkle', 'toss', 'layer', 'spread', 'top', 'garnish',
       'chop', 'dice', 'mince', 'grate', 'slice', 'cut', 'crush', 'mash', 'blend', 'puree', 'press', 'squeeze'
     ];
+    
+    // Section boundary markers
+    this.sectionMarkers = {
+      ingredients: [
+        'ingredients:', 'ingredients list:', 'you will need:', 'what you need:', 'you need:', 
+        'for the recipe:', 'recipe ingredients:', 'shopping list:', 'gather:', 'prepare:'
+      ],
+      instructions: [
+        'instructions:', 'directions:', 'method:', 'steps:', 'procedure:', 'how to make:',
+        'preparation:', 'cooking instructions:', 'step by step:'
+      ],
+      metadata: [
+        'yield:', 'servings:', 'serves:', 'makes:', 'prep time:', 'cook time:', 'total time:',
+        'temperature:', 'oven:', 'bake at:', 'cook at:'
+      ]
+    };
+    
+    // Step and direction patterns to filter out
+    this.stepPatterns = [
+      /^step\s*\d+/i,
+      /^\d+\.\s/,
+      /^first\s/,
+      /^then\s/,
+      /^next\s/,
+      /^after\s/,
+      /^finally\s/,
+      /^lastly\s/,
+      /^preheat\s/,
+      /^heat\s/,
+      /^cook\s/,
+      /^bake\s/,
+      /^boil\s/,
+      /^simmer\s/,
+      /^fry\s/,
+      /^grill\s/,
+      /^roast\s/
+    ];
   }
 
   /**
@@ -70,8 +107,12 @@ class SmartProcessingAgent {
       const formatType = this.detectRecipeFormat(recipeData);
       
       // Extract raw ingredient mentions
-      const rawIngredients = await this.extractRawIngredients(recipeData, formatType, forceModel);
-      
+      const { ingredients: rawIngredients, fallbackUsed } = await this.extractRawIngredients(
+        recipeData,
+        formatType,
+        forceModel
+      );
+
       // Normalize measurements and units
       const normalizedIngredients = this.normalizeMeasurements(rawIngredients);
       
@@ -86,7 +127,10 @@ class SmartProcessingAgent {
         normalizedIngredients,
         structuredData,
         confidence: this.calculateProcessingConfidence(structuredData),
-        processingSteps: this.getProcessingSteps(formatType)
+        processingSteps: fallbackUsed
+          ? [...this.getProcessingSteps(formatType), 'Used heuristic ingredient parsing fallback']
+          : this.getProcessingSteps(formatType),
+        fallbackUsed
       };
     });
   }
@@ -147,16 +191,201 @@ class SmartProcessingAgent {
   async extractRawIngredients(recipeData, formatType, forceModel) {
     const text = this.prepareOriginalText(recipeData);
     
-    const prompt = this.buildProcessingPrompt(text, formatType);
+    // Apply section-based processing to isolate ingredients section
+    const processedText = this.isolateIngredientsSection(text);
     
-    const response = await this.router.route('smart_processing', text, {
-      prompt,
-      maxTokens: 2000,
-      temperature: 0.2,
-      forceModel
+    const prompt = this.buildProcessingPrompt(processedText, formatType);
+    const fallbackModel = process.env.OPENROUTER_SMART_FALLBACK_MODEL || 'anthropic/claude-3-haiku-20240307';
+    const modelCandidates = [];
+
+    if (forceModel) {
+      modelCandidates.push({ type: 'tier', value: forceModel });
+    } else {
+      modelCandidates.push({ type: 'default' });
+    }
+
+    if (!forceModel && fallbackModel) {
+      modelCandidates.push({ type: 'name', value: fallbackModel });
+    }
+
+    let lastError = null;
+
+    for (const candidate of modelCandidates) {
+      try {
+        const routeOptions = {
+          prompt,
+          maxTokens: 1200,
+          temperature: 0.2
+        };
+
+        if (candidate.type === 'tier') {
+          routeOptions.forceModel = candidate.value;
+        } else if (candidate.type === 'name') {
+          routeOptions.forceModelName = candidate.value;
+        }
+
+        const response = await this.router.route('smart_processing', processedText, {
+          ...routeOptions,
+          maxTokens: Math.min(routeOptions.maxTokens, 1200),
+          priority: 'speed'
+        });
+
+        const ingredients = this.parseProcessingResponse(response.content, formatType);
+        return {
+          ingredients,
+          fallbackUsed: false
+        };
+      } catch (error) {
+        lastError = error;
+        console.warn('SmartProcessingAgent: model attempt failed', {
+          candidate,
+          message: error.message
+        });
+      }
+    }
+
+    console.warn('SmartProcessingAgent: Falling back to heuristic ingredient parsing after model failures', {
+      lastError: lastError?.message
     });
+    const fallbackIngredients = this.generateFallbackIngredients(processedText);
+    return {
+      ingredients: fallbackIngredients,
+      fallbackUsed: true
+    };
+  }
+
+  /**
+   * Isolate the ingredients section from recipe text using context-aware filtering
+   */
+  isolateIngredientsSection(fullText) {
+    const lines = fullText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     
-    return this.parseProcessingResponse(response.content, formatType);
+    let ingredientsStart = -1;
+    let ingredientsEnd = lines.length;
+    
+    // Find ingredients section start
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].toLowerCase();
+      
+      // Check for ingredients section markers
+      if (this.sectionMarkers.ingredients.some(marker => line.includes(marker))) {
+        ingredientsStart = i;
+        break;
+      }
+    }
+    
+    // If no explicit ingredients section found, try to infer it
+    if (ingredientsStart === -1) {
+      // Look for lines that contain ingredient-like patterns
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (this.looksLikeIngredientLine(line)) {
+          ingredientsStart = i;
+          break;
+        }
+      }
+    }
+    
+    // Find end of ingredients section (start of instructions or metadata)
+    for (let i = ingredientsStart + 1; i < lines.length; i++) {
+      const line = lines[i].toLowerCase();
+      
+      // Check for instructions section markers
+      if (this.sectionMarkers.instructions.some(marker => line.includes(marker))) {
+        ingredientsEnd = i;
+        break;
+      }
+      
+      // Check for metadata markers
+      if (this.sectionMarkers.metadata.some(marker => line.includes(marker))) {
+        ingredientsEnd = i;
+        break;
+      }
+      
+      // Check for step patterns
+      if (this.stepPatterns.some(pattern => pattern.test(line))) {
+        ingredientsEnd = i;
+        break;
+      }
+    }
+    
+    // Extract ingredients section
+    if (ingredientsStart !== -1 && ingredientsEnd > ingredientsStart) {
+      let ingredientsSection = lines.slice(ingredientsStart, ingredientsEnd);
+      
+      // Filter out non-ingredient lines within the section
+      ingredientsSection = ingredientsSection.filter(line => {
+        const lowerLine = line.toLowerCase();
+        
+        // Filter out step patterns
+        if (this.stepPatterns.some(pattern => pattern.test(lowerLine))) {
+          return false;
+        }
+        
+        // Filter out metadata patterns
+        if (this.sectionMarkers.metadata.some(marker => lowerLine.includes(marker))) {
+          return false;
+        }
+        
+        // Keep lines that look like ingredients
+        return this.looksLikeIngredientLine(line) || 
+               this.sectionMarkers.ingredients.some(marker => lowerLine.includes(marker));
+      });
+      
+      return ingredientsSection.join('\n');
+    }
+    
+    // If no clear section found, return filtered original text
+    return lines.filter(line => {
+      const lowerLine = line.toLowerCase();
+      
+      // Filter out obvious non-ingredient lines
+      if (this.stepPatterns.some(pattern => pattern.test(lowerLine))) {
+        return false;
+      }
+      
+      if (this.sectionMarkers.metadata.some(marker => lowerLine.includes(marker))) {
+        return false;
+      }
+      
+      if (this.sectionMarkers.instructions.some(marker => lowerLine.includes(marker))) {
+        return false;
+      }
+      
+      return true;
+    }).join('\n');
+  }
+  
+  /**
+   * Check if a line looks like it contains ingredient information
+   */
+  looksLikeIngredientLine(line) {
+    const lowerLine = line.toLowerCase();
+    
+    // Look for quantity patterns (numbers, fractions)
+    const quantityPattern = /\d+[\d\/\s.-]*/;
+    const hasQuantity = quantityPattern.test(line);
+    
+    // Look for unit patterns
+    const unitPatterns = [
+      'cup', 'tablespoon', 'tbsp', 'teaspoon', 'tsp', 'ounce', 'oz', 'pound', 'lb',
+      'gram', 'g', 'kilogram', 'kg', 'ml', 'liter', 'l', 'piece', 'pieces', 'can',
+      'jar', 'bottle', 'clove', 'cloves', 'slice', 'slices'
+    ];
+    
+    const hasUnit = unitPatterns.some(unit => lowerLine.includes(unit));
+    
+    // Look for common ingredient keywords
+    const ingredientKeywords = [
+      'flour', 'sugar', 'salt', 'pepper', 'oil', 'butter', 'egg', 'milk', 'cheese',
+      'tomato', 'onion', 'garlic', 'carrot', 'potato', 'chicken', 'beef', 'pork',
+      'rice', 'pasta', 'bread', 'bean', 'vegetable', 'fruit', 'herb', 'spice'
+    ];
+    
+    const hasIngredient = ingredientKeywords.some(keyword => lowerLine.includes(keyword));
+    
+    // Line is likely an ingredient if it has quantity + unit OR quantity + ingredient keyword
+    return (hasQuantity && hasUnit) || (hasQuantity && hasIngredient) || (hasUnit && hasIngredient);
   }
 
   /**
@@ -164,29 +393,40 @@ class SmartProcessingAgent {
    */
   buildProcessingPrompt(text, formatType) {
     const formatInstructions = {
-      structured: 'This recipe appears to have a structured ingredients section. Extract all ingredients from the ingredients list and any additional ingredients mentioned in the instructions.',
-      narrative: 'This recipe is written in narrative format. Carefully extract ALL ingredient mentions from throughout the text, including quantities, units, and preparation methods.',
-      mixed: 'This recipe has mixed formatting. Extract ingredients from both the ingredients section and scattered throughout the instructions.',
-      casual: 'This is a casual recipe description. Extract all ingredient mentions, inferring quantities and units from context where possible.'
+      structured: 'This recipe appears to have a structured ingredients section. Extract all ingredients from the ingredients list only. Ignore any instructions, steps, or metadata.',
+      narrative: 'This recipe is written in narrative format. Extract only actual ingredient mentions with their quantities and units. Ignore cooking instructions, steps, and serving information.',
+      mixed: 'This recipe has mixed formatting. Focus exclusively on the ingredients section. Extract ingredients with quantities and units, but ignore all instructions and steps.',
+      casual: 'This is a casual recipe description. Extract only ingredient mentions with quantities and units. Ignore preparation steps, cooking instructions, and serving information.'
     };
     
-    return `You are a smart recipe processing agent. Your task is to extract ALL ingredient mentions from recipe text, regardless of format.
+    return `You are a smart recipe processing agent. Your task is to extract ONLY ingredient information from the provided text.
 
 ${formatInstructions[formatType]}
 
-For each ingredient mention, extract:
-1. The ingredient name (normalized)
-2. Quantity (if mentioned or can be inferred)
-3. Unit (standardized)
-4. Preparation method (chopped, diced, etc.)
-5. Context/location in recipe
-6. Confidence in extraction
+CRITICAL: Extract ONLY actual ingredients. IGNORE:
+- Step numbers (Step 1, 1., 2., etc.)
+- Cooking instructions (preheat, mix, stir, bake, etc.)
+- Serving information (Yield, Servings, Serves, etc.)
+- Time and temperature information
+- Preparation directions
 
-Pay special attention to:
-- Ingredients mentioned in instructions (e.g., "add 2 cups of flour")
-- Implicit quantities (e.g., "an onion", "some garlic")
-- Preparation instructions embedded with ingredients
-- Ingredients mentioned across multiple sentences
+For each ingredient, extract:
+1. The ingredient name (normalized)
+2. Quantity (if mentioned)
+3. Unit (standardized)
+4. Preparation method (chopped, diced, etc. - only if part of ingredient description)
+5. Confidence in extraction
+
+Focus EXCLUSIVELY on lines that contain:
+- Food items with quantities (e.g., "2 cups flour", "1 onion", "3 eggs")
+- Ingredients with units (e.g., "1 lb chicken", "1 can tomatoes")
+- Preparation notes attached to ingredients (e.g., "2 cups chopped carrots")
+
+DO NOT extract:
+- "Step 1: Preheat oven to 350°F"
+- "Yield: 4 servings"
+- "Cook for 30 minutes"
+- "Mix until well combined"
 
 Return as JSON:
 {
@@ -196,7 +436,7 @@ Return as JSON:
       "quantity": "quantity or null",
       "unit": "unit or null",
       "preparation": "preparation method or null",
-      "context": "where this was found in the recipe",
+      "context": "ingredients section",
       "confidence": 0.0-1.0,
       "raw_text": "exact text from recipe"
     }
@@ -205,43 +445,98 @@ Return as JSON:
   "total_mentions": number
 }
 
-Recipe text:
+Recipe text (ingredients section only):
 ${text}
 
-Respond only with valid JSON, no additional text.`;
+CRITICAL OUTPUT FORMAT RULES:
+- Respond with a single JSON object ONLY.
+- Do NOT include explanations, commentary, or code fences.
+- The very first character must be '{' and the final character must be '}'.
+- If you cannot comply, respond with {"ingredients":[],"format_confidence":0,"total_mentions":0}.
+`;
   }
 
   /**
    * Parse the AI processing response
    */
   parseProcessingResponse(response, formatType) {
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in processing response');
-      }
-      
-      const parsed = JSON.parse(jsonMatch[0]);
-      
-      if (!parsed.ingredients || !Array.isArray(parsed.ingredients)) {
-        throw new Error('Invalid ingredients format in processing response');
-      }
-      
-      return parsed.ingredients.map(ingredient => ({
-        name: ingredient.name || '',
-        quantity: ingredient.quantity || null,
-        unit: ingredient.unit || null,
-        preparation: ingredient.preparation || null,
-        context: ingredient.context || '',
-        confidence: parseFloat(ingredient.confidence) || 0.5,
-        rawText: ingredient.raw_text || '',
-        formatType
-      }));
-      
-    } catch (error) {
-      console.error('Failed to parse processing response:', error);
-      return [];
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found in processing response');
     }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    if (!parsed.ingredients || !Array.isArray(parsed.ingredients)) {
+      throw new Error('Invalid ingredients format in processing response');
+    }
+
+    return parsed.ingredients.map(ingredient => ({
+      name: ingredient.name || '',
+      quantity: ingredient.quantity || null,
+      unit: ingredient.unit || null,
+      preparation: ingredient.preparation || null,
+      context: ingredient.context || '',
+      confidence: parseFloat(ingredient.confidence) || 0.5,
+      rawText: ingredient.raw_text || '',
+      formatType
+    }));
+  }
+
+  /**
+   * Generate heuristic ingredient list when AI response is unusable
+   */
+  generateFallbackIngredients(text) {
+    const lines = (text || '').split('\n');
+    const results = [];
+
+    lines.forEach(line => {
+      let cleanedLine = line.replace(/^[\-\*\u2022\u2023\u25CF\u25E6•●◦]+\s*/, '').trim();
+      if (!cleanedLine) return;
+
+      cleanedLine = cleanedLine.replace(/^ingredients?\s*[:\-]\s*/i, '').trim();
+      if (!cleanedLine) return;
+
+      const segments = cleanedLine.split(/,(?![^()]*\))/).map(segment => segment.trim()).filter(Boolean);
+
+      segments.forEach(segment => {
+        if (!segment) return;
+
+        const looksLikeIngredient = this.looksLikeIngredientLine(segment) || /[a-z]/i.test(segment);
+        if (!looksLikeIngredient) return;
+
+        let remaining = segment;
+        let quantity = null;
+        const quantityMatch = remaining.match(/^(\d+(?:\s+\d+\/\d+)?|\d+\/\d+|\d*\.\d+)/);
+        if (quantityMatch) {
+          quantity = quantityMatch[1].trim();
+          remaining = remaining.slice(quantityMatch[0].length).trim();
+        }
+
+        let unit = null;
+        const unitMatch = remaining.match(/^(cups?|tablespoons?|tbsp|teaspoons?|tsp|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|milliliters?|ml|liters?|l|cloves?|pieces?|slices?|sticks?|packages?|packs?|packets?|cans?|jars?|heads?|bunches?|pinches?|dashes?|sprinkles?|cups?\b)/i);
+        if (unitMatch) {
+          unit = unitMatch[0];
+          remaining = remaining.slice(unitMatch[0].length).trim();
+        }
+
+        if (!remaining) {
+          remaining = segment;
+        }
+
+        results.push({
+          name: remaining,
+          quantity: quantity,
+          unit: unit,
+          preparation: null,
+          context: 'heuristic_fallback',
+          confidence: 0.7,
+          raw_text: segment
+        });
+      });
+    });
+
+    return results;
   }
 
   /**

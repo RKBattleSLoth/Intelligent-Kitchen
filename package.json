@@ -19,10 +19,20 @@
     "docker:down": "docker-compose down",
     "setup": "npm install && cd backend && npm install && cd ../frontend && npm install"
   },
-  "keywords": ["ai", "meal-planning", "pantry", "grocery", "recipe"],
+  "keywords": [
+    "ai",
+    "meal-planning",
+    "pantry",
+    "grocery",
+    "recipe"
+  ],
   "author": "Intelligent Kitchen Team",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3"
   }
 }

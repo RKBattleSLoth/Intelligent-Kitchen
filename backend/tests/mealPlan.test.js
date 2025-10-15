@@ -1,5 +1,9 @@
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_meal_plans_1234567890_secure';
+
 const request = require('supertest');
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const { query, pool } = require('../src/config/database');
 const mealPlanRoutes = require('../src/controllers/mealPlanController');
 
@@ -15,8 +19,18 @@ const testRecipeId = 'test-recipe-id';
 describe('Meal Planning API', () => {
   let mealPlanId;
   let entryId;
+  let authToken;
 
   beforeAll(async () => {
+    await query(
+      `INSERT INTO users (id, email, password_hash, first_name, last_name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [testUserId, 'mealplan-test-user@example.com', 'test-password-hash', 'MealPlan', 'Tester']
+    );
+
+    authToken = jwt.sign({ userId: testUserId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
     // Clean up any existing test data
     await query('DELETE FROM meal_plan_entries WHERE meal_plan_id IN (SELECT id FROM meal_plans WHERE user_id = $1)', [testUserId]);
     await query('DELETE FROM meal_plans WHERE user_id = $1 AND name LIKE $2', [testUserId, 'Test%']);
@@ -26,6 +40,7 @@ describe('Meal Planning API', () => {
     // Clean up test data
     await query('DELETE FROM meal_plan_entries WHERE meal_plan_id IN (SELECT id FROM meal_plans WHERE user_id = $1)', [testUserId]);
     await query('DELETE FROM meal_plans WHERE user_id = $1 AND name LIKE $2', [testUserId, 'Test%']);
+    await query('DELETE FROM users WHERE id = $1', [testUserId]);
     await pool.end();
   });
 
@@ -40,6 +55,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post('/api/meal-plans')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(mealPlanData)
         .expect(201);
 
@@ -61,6 +77,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post('/api/meal-plans')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(mealPlanData)
         .expect(400);
 
@@ -75,6 +92,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post('/api/meal-plans')
+        .set('Authorization', `Bearer ${authToken}`)
         .send(mealPlanData)
         .expect(400);
 
@@ -86,6 +104,7 @@ describe('Meal Planning API', () => {
     it('should get all meal plans for user', async () => {
       const response = await request(app)
         .get('/api/meal-plans')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -101,6 +120,7 @@ describe('Meal Planning API', () => {
     it('should get specific meal plan with entries', async () => {
       const response = await request(app)
         .get(`/api/meal-plans/${mealPlanId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(mealPlanId);
@@ -112,6 +132,7 @@ describe('Meal Planning API', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const response = await request(app)
         .get(`/api/meal-plans/${fakeId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.error).toBe('Meal plan not found');
@@ -129,6 +150,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post(`/api/meal-plans/${mealPlanId}/entries`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(entryData)
         .expect(201);
 
@@ -149,6 +171,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post(`/api/meal-plans/${mealPlanId}/entries`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(entryData)
         .expect(409);
 
@@ -165,6 +188,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post(`/api/meal-plans/${mealPlanId}/entries`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(entryData)
         .expect(400);
 
@@ -181,6 +205,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .post(`/api/meal-plans/${mealPlanId}/entries`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(entryData)
         .expect(400);
 
@@ -197,6 +222,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .put(`/api/meal-plans/entries/${entryId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(updateData)
         .expect(200);
 
@@ -209,6 +235,7 @@ describe('Meal Planning API', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const response = await request(app)
         .put(`/api/meal-plans/entries/${fakeId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ mealType: 'lunch' })
         .expect(404);
 
@@ -220,6 +247,7 @@ describe('Meal Planning API', () => {
     it('should get meal plans for date range', async () => {
       const response = await request(app)
         .get('/api/meal-plans/range/2024-01-01/2024-01-07')
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -240,6 +268,7 @@ describe('Meal Planning API', () => {
 
       const response = await request(app)
         .put(`/api/meal-plans/${mealPlanId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send(updateData)
         .expect(200);
 
@@ -253,6 +282,7 @@ describe('Meal Planning API', () => {
     it('should delete meal entry', async () => {
       const response = await request(app)
         .delete(`/api/meal-plans/entries/${entryId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.message).toBe('Meal entry deleted successfully');
@@ -262,6 +292,7 @@ describe('Meal Planning API', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const response = await request(app)
         .delete(`/api/meal-plans/entries/${fakeId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.error).toBe('Meal entry not found');
@@ -272,6 +303,7 @@ describe('Meal Planning API', () => {
     it('should delete meal plan', async () => {
       const response = await request(app)
         .delete(`/api/meal-plans/${mealPlanId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.message).toBe('Meal plan deleted successfully');
@@ -281,6 +313,7 @@ describe('Meal Planning API', () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const response = await request(app)
         .delete(`/api/meal-plans/${fakeId}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.error).toBe('Meal plan not found');

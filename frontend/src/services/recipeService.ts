@@ -1,4 +1,5 @@
 import { Recipe, RecipeFormData, RecipeCategory } from '../types/recipe'
+import { aiService } from './aiService'
 
 const STORAGE_KEY = 'intelligent-kitchen-recipes'
 
@@ -95,8 +96,52 @@ class RecipeService {
     return true
   }
 
-  // Extract ingredients from instructions text (simple version)
-  extractIngredients(instructions: string): string[] {
+  // Extract ingredients from instructions text using AI
+  async extractIngredients(instructions: string, recipeName: string = 'Unknown Recipe'): Promise<string[]> {
+    try {
+      const result = await aiService.extractIngredientsFromRecipe({
+        id: Date.now().toString(),
+        name: recipeName,
+        instructions: instructions
+      })
+      
+      if (result.success && result.ingredients.length > 0) {
+        // Convert structured ingredients to string array preserving all information
+        return result.ingredients.map(ingredient => {
+          const parts = []
+          
+          // Handle both 'amount' and 'quantity' fields for backend compatibility
+          const quantity = ingredient.amount || ingredient.quantity
+          if (quantity) {
+            // Convert numeric quantities to string with reasonable precision
+            if (typeof quantity === 'number') {
+              parts.push(quantity.toString())
+            } else {
+              parts.push(quantity)
+            }
+          }
+          
+          if (ingredient.unit) parts.push(ingredient.unit)
+          if (ingredient.name) parts.push(ingredient.name)
+          
+          // Add preparation notes if present
+          if (ingredient.preparation) parts.push(`(${ingredient.preparation})`)
+          else if (ingredient.notes) parts.push(`(${ingredient.notes})`)
+          
+          return parts.join(' ')
+        })
+      } else {
+        // Fallback to basic extraction if AI fails
+        return this.extractBasicIngredients(instructions)
+      }
+    } catch (error) {
+      console.error('AI ingredient extraction failed, using fallback:', error)
+      return this.extractBasicIngredients(instructions)
+    }
+  }
+
+  // Basic ingredient extraction (fallback method)
+  private extractBasicIngredients(instructions: string): string[] {
     const lines = instructions.split('\n')
     const ingredients: string[] = []
     

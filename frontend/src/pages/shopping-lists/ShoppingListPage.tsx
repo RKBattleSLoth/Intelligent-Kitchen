@@ -129,6 +129,26 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }
   };
 
+  const markAllAsComplete = async () => {
+    try {
+      setError(null);
+      const updatedItems = await Promise.all(
+        items.filter(item => !item.is_checked).map(item =>
+          shoppingListService.updateShoppingListItem(item.id, { is_checked: true })
+        )
+      );
+      
+      // Update all items to checked
+      setItems(items.map(item => ({
+        ...item,
+        is_checked: true
+      })));
+    } catch (err) {
+      setError('Failed to mark all items as complete');
+      console.error('Error marking all as complete:', err);
+    }
+  };
+
   // AI Functions
   const addRecipeIngredients = async (recipeId: string) => {
     try {
@@ -294,6 +314,24 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             gap: '0.25rem'
           }
         }, ['🍳', showRecipeSelector ? 'Hide Recipes' : 'Add Recipe Ingredients']),
+        
+        // Mark All As Complete Button
+        items.length > 0 && items.some(item => !item.is_checked) && React.createElement('button', {
+          key: 'mark-all-btn',
+          onClick: markAllAsComplete,
+          style: {
+            background: '#10b981',
+            color: 'white',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }
+        }, ['✓', 'Mark All Complete']),
         
         // Clear Completed Button
         items.some(item => item.is_checked) && React.createElement('button', {

@@ -6,10 +6,13 @@ export interface IngredientExtractionResult {
   success: boolean;
   ingredients: Array<{
     name: string;
-    amount: string;
+    amount: string;        // String representation for UI display
+    quantity?: number;     // Numeric value for calculations
     unit: string;
-    category: string;
+    category?: string;
+    preparation?: string;
     notes?: string;
+    confidence?: number;
   }>;
   error?: string;
 }

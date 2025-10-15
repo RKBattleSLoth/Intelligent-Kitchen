@@ -6,9 +6,12 @@
  * enhances the ingredient information with additional context.
  */
 
+const RequestRouter = require('../RequestRouter');
+
 class ValidationAgent {
   constructor(openRouterClient) {
     this.client = openRouterClient;
+    this.router = new (require('../RequestRouter'))();
     this.agentName = 'ValidationAgent';
   }
 
@@ -20,47 +23,66 @@ class ValidationAgent {
    * @returns {Promise<Object>} - Validated and enhanced ingredient data
    */
   async validateAndEnhance(extractedData, preprocessingData, options = {}) {
+    const startTime = Date.now();
     try {
       console.log(`${this.agentName}: Starting validation and enhancement process`);
       
       const validationPrompt = this.buildValidationPrompt(extractedData, preprocessingData, options);
-      
-      const response = await this.client.chat.completions.create({
-        model: "anthropic/claude-3.5-haiku",
-        messages: [
-          {
-            role: "system",
-            content: this.getSystemPrompt()
-          },
-          {
-            role: "user",
-            content: validationPrompt
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 2000
-      });
 
-      const validationResult = this.parseValidationResponse(response.choices[0].message.content);
+      // Try with primary model first, then fallback
+      const fallbackModel = process.env.OPENROUTER_VALIDATION_FALLBACK_MODEL || 'google/gemini-flash-1.5-8b';
+      let response;
+      
+      try {
+        response = await this.router.route('validation', {
+          extractedData,
+          preprocessingData
+        }, {
+          prompt: validationPrompt,
+          maxTokens: 1200,
+          temperature: 0.2,
+          forceModelName: process.env.OPENROUTER_MODEL_SMALL,
+          priority: 'speed'
+        });
+      } catch (primaryError) {
+        console.warn(`${this.agentName}: Primary model failed, using fallback model`);
+        response = await this.router.route('validation', {
+          extractedData,
+          preprocessingData
+        }, {
+          prompt: validationPrompt,
+          maxTokens: 1200,
+          temperature: 0.2,
+          forceModelName: fallbackModel,
+          priority: 'speed'
+        });
+      }
+
+      const validationResult = this.parseValidationResponse(response.content);
       
       // Apply additional validation rules
       const finalResult = this.applyBusinessRules(validationResult, extractedData);
       
-      console.log(`${this.agentName}: Validation complete. Found ${finalResult.validatedIngredients.length} validated ingredients`);
+      const processingTime = Date.now() - startTime;
+      console.log(`${this.agentName}: Validation complete in ${processingTime}ms. Found ${finalResult.validatedIngredients.length} validated ingredients`);
       
       return {
         ...finalResult,
         validationMetadata: {
-          originalCount: extractedData.categorizedIngredients?.length || 0,
+          originalCount: (extractedData.categorizedIngredients?.length
+            || extractedData.ingredients?.length
+            || 0),
           validatedCount: finalResult.validatedIngredients.length,
           issuesDetected: finalResult.issues.length,
           enhancementsApplied: finalResult.enhancements.length,
-          confidence: this.calculateOverallConfidence(finalResult.validatedIngredients)
+          confidence: this.calculateOverallConfidence(finalResult.validatedIngredients),
+          processingTime
         }
       };
 
     } catch (error) {
-      console.error(`${this.agentName}: Validation failed:`, error);
+      const processingTime = Date.now() - startTime;
+      console.error(`${this.agentName}: Validation failed after ${processingTime}ms:`, error);
       return this.createFallbackValidation(extractedData);
     }
   }
@@ -186,7 +208,9 @@ Be thorough but practical. Focus on information that helps users successfully ex
    * Apply business rules and additional validation
    */
   applyBusinessRules(validationResult, originalData) {
-    const validatedIngredients = validationResult.validatedIngredients || [];
+    const validatedIngredients = Array.isArray(validationResult.validatedIngredients)
+      ? validationResult.validatedIngredients
+      : [];
     
     // Apply business rules
     const enhancedIngredients = validatedIngredients.map(ingredient => {
@@ -330,7 +354,9 @@ Be thorough but practical. Focus on information that helps users successfully ex
   createFallbackValidation(extractedData) {
     console.log(`${this.agentName}: Using fallback validation`);
     
-    const ingredients = extractedData.categorizedIngredients || [];
+    const ingredients = extractedData.categorizedIngredients
+      || extractedData.ingredients
+      || [];
     const validatedIngredients = ingredients.map(ingredient => ({
       ...ingredient,
       confidence: 0.6,

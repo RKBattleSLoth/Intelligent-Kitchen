@@ -206,6 +206,14 @@ class ResponseCache {
     // Try to get from cache first
     const cached = await this.get(taskType, input, options);
     if (cached) {
+      if (cached.response && typeof cached.response === 'object') {
+        return {
+          ...cached.response,
+          fromCache: true,
+          cacheKey: cached.cacheKey,
+          cachedAt: cached.timestamp
+        };
+      }
       return cached;
     }
 
