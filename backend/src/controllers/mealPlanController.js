@@ -402,4 +402,39 @@ router.get('/range/:startDate/:endDate', authenticateToken, async (req, res) => 
   }
 });
 
+// Generate AI meal plan
+router.post('/generate', authenticateToken, [
+  body('startDate').isISO8601(),
+  body('endDate').isISO8601(),
+  body('mealTypes').optional().isArray(),
+  body('preferences').optional().isObject(),
+  body('constraints').optional().isArray(),
+  body('peopleCount').optional().isInt({ min: 1, max: 20 }),
+  handleValidationErrors
+], async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mealPlanner = new (require('../services/ai/SmartMealPlanner'))();
+
+    const result = await mealPlanner.generateMealPlan({
+      userId,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      mealTypes: req.body.mealTypes || ['breakfast', 'lunch', 'dinner'],
+      preferences: req.body.preferences || {},
+      constraints: req.body.constraints || [],
+      recipeSource: req.body.recipeSource || 'mixed',
+      peopleCount: req.body.peopleCount || 4
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Generate meal plan error:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate meal plan',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;

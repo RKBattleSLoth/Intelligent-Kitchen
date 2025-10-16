@@ -36,12 +36,7 @@ class OpenRouterClient {
       messages,
       temperature,
       max_tokens: maxTokens,
-      stream,
-      // Add app identification
-      headers: {
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
-        'X-Title': this.appTitle
-      }
+      stream
     };
 
     let lastError;

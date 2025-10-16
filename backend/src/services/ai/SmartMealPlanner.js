@@ -1,4 +1,5 @@
 const OpenRouterClient = require('./OpenRouterClient');
+const OpenRouterClient = require('./OpenRouterClient');
 const { query } = require('../../config/database');
 
 class SmartMealPlanner {
@@ -31,16 +32,15 @@ class SmartMealPlanner {
 
     try {
       // Call OpenRouter to generate meal plan
-      const response = await this.client.sendRequest({
+      const response = await this.client.chat([
+        {
+          role: 'user',
+          content: prompt
+        }
+      ], {
         model: 'anthropic/claude-3.5-sonnet',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
         temperature: 0.7,
-        max_tokens: 4000
+        maxTokens: 4000
       });
 
       // Parse the response
@@ -116,8 +116,8 @@ Recipe Source: ${recipeSource}`;
 
   parseMealPlanResponse(response) {
     try {
-      // Extract JSON from the response
-      const content = response.choices[0].message.content;
+      // Extract content from the response
+      const content = response.content || response;
       
       // Try to find JSON in the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -163,16 +163,15 @@ Respond in JSON format:
 }`;
 
     try {
-      const response = await this.client.sendRequest({
+      const response = await this.client.chat([
+        {
+          role: 'user',
+          content: prompt
+        }
+      ], {
         model: 'anthropic/claude-3.5-sonnet',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
         temperature: 0.7,
-        max_tokens: 1000
+        maxTokens: 1000
       });
 
       const alternatives = this.parseAlternativesResponse(response);
@@ -185,7 +184,7 @@ Respond in JSON format:
 
   parseAlternativesResponse(response) {
     try {
-      const content = response.choices[0].message.content;
+      const content = response.content || response;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         return { alternatives: [] };
