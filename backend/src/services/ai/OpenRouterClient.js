@@ -13,6 +13,8 @@ class OpenRouterClient {
     
     if (!this.apiKey || this.apiKey === 'your-openrouter-api-key') {
       console.warn('⚠️ OpenRouter API key not configured. AI features will be limited.');
+    } else {
+      console.log('✅ OpenRouter API key loaded:', this.apiKey.substring(0, 20) + '...');
     }
   }
 
@@ -44,8 +46,10 @@ class OpenRouterClient {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         console.log(`🤖 OpenRouter Request (Attempt ${attempt}/${this.maxRetries}): ${model}`);
+        console.log(`   API Key: ${this.apiKey ? this.apiKey.substring(0, 20) + '...' + this.apiKey.slice(-4) : 'NOT SET'}`);
+        console.log(`   Request body:`, JSON.stringify(requestBody).substring(0, 200) + '...');
         
-        const response = await fetch(`${this.baseURL}/chat/completions`, {
+        const fetchOptions = {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -54,7 +58,16 @@ class OpenRouterClient {
             'X-Title': this.appTitle
           },
           body: JSON.stringify(requestBody)
+        };
+        
+        console.log(`   Headers:`, {
+          Authorization: fetchOptions.headers.Authorization ? fetchOptions.headers.Authorization.substring(0, 20) + '...' : 'NOT SET',
+          'Content-Type': fetchOptions.headers['Content-Type'],
+          'HTTP-Referer': fetchOptions.headers['HTTP-Referer'],
+          'X-Title': fetchOptions.headers['X-Title']
         });
+        
+        const response = await fetch(`${this.baseURL}/chat/completions`, fetchOptions);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));

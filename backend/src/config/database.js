@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+// dotenv.config() is called from index.js - do not call it again here
+// require('dotenv').config();
 
 const isTestEnv = process.env.NODE_ENV === 'test';
 

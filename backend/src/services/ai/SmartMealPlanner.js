@@ -1,5 +1,4 @@
 const OpenRouterClient = require('./OpenRouterClient');
-const OpenRouterClient = require('./OpenRouterClient');
 const { query } = require('../../config/database');
 
 class SmartMealPlanner {

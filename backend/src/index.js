@@ -1,14 +1,25 @@
 const express = require('express');
+// Load environment variables FIRST, before any other imports
+const dotenv = require('dotenv');
+const path = require('path');
+const envPath = path.join(__dirname, '..', '.env');
+console.log(`📁 Loading .env from: ${envPath}`);
+// Use override: true to override existing environment variables
+const result = dotenv.config({ path: envPath, override: true });
+if (result.error) {
+  console.error('❌ Error loading .env:', result.error);
+} else {
+  console.log(`✅ Loaded ${Object.keys(result.parsed).length} environment variables`);
+}
+console.log(`🔑 OPENROUTER_API_KEY value: ${process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.substring(0, 20) + '...' : 'NOT SET'}`);
+
+
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const dotenv = require('dotenv');
 const { runMigrations } = require('./database/migrate');
 const db = require('./config/database');
 const { initEnv } = require('./config/env');
-
-// Load environment variables
-dotenv.config();
 
 // Validate environment configuration
 if (!initEnv()) {

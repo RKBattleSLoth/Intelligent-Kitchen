@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { query } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validation');
+const SmartMealPlanner = require('../services/ai/SmartMealPlanner');
 
 const router = express.Router();
 
@@ -414,7 +415,7 @@ router.post('/generate', authenticateToken, [
 ], async (req, res) => {
   try {
     const userId = req.user.id;
-    const mealPlanner = new (require('../services/ai/SmartMealPlanner'))();
+    const mealPlanner = new SmartMealPlanner();
 
     const result = await mealPlanner.generateMealPlan({
       userId,
