@@ -8,7 +8,7 @@ class OpenRouterClient {
     this.apiKey = process.env.OPENROUTER_API_KEY;
     this.baseURL = 'https://openrouter.ai/api/v1';
     this.appTitle = process.env.OPENROUTER_APP_TITLE || 'Intelligent Kitchen AI';
-    this.timeout = parseInt(process.env.AI_TIMEOUT) || 30000;
+    this.timeout = parseInt(process.env.AI_TIMEOUT) || 120000;  // 2 minutes for AI operations
     this.maxRetries = parseInt(process.env.AI_MAX_RETRIES) || 3;
     
     if (!this.apiKey || this.apiKey === 'your-openrouter-api-key') {
