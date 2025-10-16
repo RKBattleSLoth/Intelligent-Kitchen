@@ -4,6 +4,7 @@ import { Recipe } from '../../types/recipe'
 import { mealPlanService } from '../../services/mealPlanService'
 import { recipeService } from '../../services/recipeService'
 import { RecipeForm } from '../../components/recipes/RecipeForm'
+import { SmartMealPlannerModal } from '../../components/meal-planning/SmartMealPlannerModal'
 
 interface RecipeSelectionModalProps {
   isOpen: boolean
@@ -226,6 +227,7 @@ export const MealPlanningPage: React.FC = () => {
   const [showRecipeForm, setShowRecipeForm] = useState(false)
   const [draggedMeal, setDraggedMeal] = useState<{ date: string; mealSlot: MealSlot; meal: PlannedMeal } | null>(null)
   const [dragOverSlot, setDragOverSlot] = useState<{ date: string; mealSlot: MealSlot } | null>(null)
+  const [showSmartPlanner, setShowSmartPlanner] = useState(false)
 
   useEffect(() => {
     loadFilters()
@@ -293,6 +295,13 @@ export const MealPlanningPage: React.FC = () => {
     setShowRecipeForm(false)
     // Re-open the recipe modal to select the newly added recipe
     setShowRecipeModal(true)
+  }
+
+  const handleSmartMealPlanGenerated = (result: any) => {
+    if (result.mealPlan) {
+      mealPlanService.syncAIMealPlan(result.mealPlan)
+      loadPlannedMeals()
+    }
   }
 
   // Drag and Drop handlers
@@ -469,7 +478,20 @@ export const MealPlanningPage: React.FC = () => {
             borderRadius: '0.375rem',
             cursor: 'pointer'
           }
-        }, 'Next →')
+        }, 'Next →'),
+        React.createElement('button', {
+          key: 'smart-planner',
+          onClick: () => setShowSmartPlanner(true),
+          style: {
+            padding: '0.5rem 1rem',
+            background: '#10b981',
+            color: 'white',
+            border: '1px solid #059669',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }
+        }, '🤖 Smart Meal Plan')
       ])
     ]),
 
@@ -651,6 +673,13 @@ export const MealPlanningPage: React.FC = () => {
       onAddNewRecipe: handleAddNewRecipe,
       mealSlot: selectedSlot?.mealSlot || 'Breakfast',
       date: selectedSlot?.date || ''
+    }),
+    // Smart Meal Planner Modal
+    React.createElement(SmartMealPlannerModal, {
+      key: 'smart-planner-modal',
+      isOpen: showSmartPlanner,
+      onClose: () => setShowSmartPlanner(false),
+      onMealPlanGenerated: handleSmartMealPlanGenerated
     })
   ])
 }
