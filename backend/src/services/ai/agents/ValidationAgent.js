@@ -7,6 +7,7 @@
  */
 
 const RequestRouter = require('../RequestRouter');
+const { extractAndParseJSON } = require('../../../utils/jsonParser');
 
 class ValidationAgent {
   constructor(openRouterClient) {
@@ -191,15 +192,10 @@ Be thorough but practical. Focus on information that helps users successfully ex
    */
   parseValidationResponse(responseContent) {
     try {
-      // Extract JSON from response
-      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in validation response');
-      }
-      
-      return JSON.parse(jsonMatch[0]);
+      // Use robust JSON extraction that handles nested structures
+      return extractAndParseJSON(responseContent);
     } catch (error) {
-      console.error(`${this.agentName}: Failed to parse validation response:`, error);
+      console.error(`${this.agentName}: Failed to parse validation response:`, error.message);
       throw error;
     }
   }

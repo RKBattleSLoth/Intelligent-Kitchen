@@ -6,6 +6,7 @@
 
 const RequestRouter = require('../RequestRouter');
 const ResponseCache = require('../ResponseCache');
+const { extractAndParseJSON } = require('../../../utils/jsonParser');
 
 class SmartProcessingAgent {
   constructor() {
@@ -460,12 +461,8 @@ CRITICAL OUTPUT FORMAT RULES:
    * Parse the AI processing response
    */
   parseProcessingResponse(response, formatType) {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No JSON found in processing response');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Use robust JSON extraction that handles nested structures
+    const parsed = extractAndParseJSON(response);
 
     if (!parsed.ingredients || !Array.isArray(parsed.ingredients)) {
       throw new Error('Invalid ingredients format in processing response');
