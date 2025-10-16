@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface IngredientExtractionResult {
   success: boolean;
@@ -100,7 +100,7 @@ class AIService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = `${API_BASE_URL}/api/ai`;
+    this.baseURL = `${API_BASE_URL}/ai`;
   }
 
   /**
