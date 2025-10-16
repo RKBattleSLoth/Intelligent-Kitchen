@@ -240,6 +240,28 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     );
   };
 
+  const copyAllItems = async () => {
+    if (items.length === 0) return;
+    
+    try {
+      // Format items nicely for copying
+      const formattedItems = items
+        .map(item => `${item.is_checked ? '✓' : '○'} ${item.item_text}`)
+        .join('\n');
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(formattedItems);
+      
+      // Show brief success feedback
+      setError(null);
+      // We can't show success easily without adding more state, so we'll just silently succeed
+      console.log('Shopping list copied to clipboard');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      setError('Failed to copy to clipboard');
+    }
+  };
+
   if (loading) {
     return React.createElement('div', {
       style: { 
@@ -332,6 +354,24 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             gap: '0.25rem'
           }
         }, ['✓', 'Mark All Complete']),
+        
+        // Copy All Button
+        items.length > 0 && React.createElement('button', {
+          key: 'copy-all-btn',
+          onClick: copyAllItems,
+          style: {
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }
+        }, ['📋', 'Copy All']),
         
         // Clear Completed Button
         items.some(item => item.is_checked) && React.createElement('button', {

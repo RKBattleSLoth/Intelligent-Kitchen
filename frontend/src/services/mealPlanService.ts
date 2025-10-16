@@ -1,5 +1,6 @@
 import { PlannedMeal, MealPlan, MealPlanFilters, DEFAULT_MEAL_PLAN_FILTERS } from '../types/mealPlan'
 import { Recipe } from '../types/recipe'
+import api from './api'
 
 const STORAGE_KEY = 'intelligent-kitchen-meal-plans'
 const FILTERS_KEY = 'intelligent-kitchen-meal-filters'
@@ -128,6 +129,78 @@ class MealPlanService {
   clearAllMealPlans(): void {
     this.mealPlans = []
     this.saveToStorage()
+  }
+
+  // Get meal planning preferences
+  async getMealPlanningPreferences() {
+    try {
+      const response = await api.get('/meal-plans/preferences')
+      return response.data
+    } catch (error) {
+      console.error('Error loading preferences:', error)
+      return {
+        dietary: 'none',
+        healthGoal: 'maintain',
+        budget: 'moderate'
+      }
+    }
+  }
+
+  // Generate AI meal plan
+  async generateAIMealPlan(options: {
+    startDate: string
+    endDate: string
+    mealTypes: string[]
+    preferences: any
+    constraints: any[]
+    recipeSource: 'saved' | 'generated' | 'mixed'
+    peopleCount: number
+    saveToDatabase?: boolean
+    planName?: string
+  }) {
+    try {
+      const response = await api.post('/meal-plans/generate', options)
+      return response.data
+    } catch (error) {
+      console.error('Error generating AI meal plan:', error)
+      throw error
+    }
+  }
+
+  // Get meal alternatives
+  async getMealAlternatives(options: {
+    date: string
+    mealType: string
+    currentRecipe: string
+    preferences?: any
+  }) {
+    try {
+      const response = await api.post('/meal-plans/alternatives', options)
+      return response.data
+    } catch (error) {
+      console.error('Error getting meal alternatives:', error)
+      throw error
+    }
+  }
+
+  // Sync AI meal plan with local storage
+  syncAIMealPlan(mealPlan: any): void {
+    if (!mealPlan || !mealPlan.meals) return
+
+    for (const meal of mealPlan.meals) {
+      if (meal.date && meal.mealType && meal.name) {
+        const recipe: Recipe = {
+          id: `ai-recipe-${meal.date}-${meal.mealType}`,
+          name: meal.name,
+          category: meal.mealType as any,
+          instructions: meal.description || meal.name,
+          ingredients: meal.ingredients || [],
+          prepTime: meal.cookTime || 30,
+          cookTime: meal.cookTime || 30
+        }
+        this.addPlannedMeal(meal.date, meal.mealType, recipe)
+      }
+    }
   }
 }
 
