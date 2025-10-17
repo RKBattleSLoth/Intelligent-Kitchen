@@ -24,15 +24,24 @@ class ShoppingListService {
     return this.getItems();
   }
 
-  async addShoppingListItem(itemText: string): Promise<ShoppingListItem> {
+  async addShoppingListItem(item: string | {
+    text: string;
+    quantity?: string | number | null;
+    unit?: string | null;
+    name?: string | null;
+  }): Promise<ShoppingListItem> {
     const items = this.getItems();
+    const baseText = typeof item === 'string' ? item : item.text;
     const newItem: ShoppingListItem = {
       id: this.generateId(),
-      item_text: itemText.trim(),
+      item_text: baseText.trim(),
       is_checked: false,
       position: items.length,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      quantity: typeof item === 'object' ? (item.quantity ?? null) : null,
+      unit: typeof item === 'object' ? (item.unit ?? null) : null,
+      name: typeof item === 'object' ? (item.name ?? null) : null
     };
     
     items.push(newItem);

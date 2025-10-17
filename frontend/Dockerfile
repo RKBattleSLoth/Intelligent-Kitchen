@@ -1,4 +1,4 @@
-FROM node:18-alpine AS build
+FROM node:20 AS build
 
 WORKDIR /app
 
@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm ci && npm install @rollup/rollup-linux-arm64-gnu --no-save --ignore-scripts
 
 # Copy source code
 COPY . .

@@ -161,50 +161,61 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         return;
       }
       
-      // Extract ingredients using AI
-      const result: IngredientExtractionResult = await aiService.extractIngredientsFromRecipe({
+      const parseResult = recipeService.parseInstructions(recipe.instructions);
+      const highConfidence = parseResult.confidence >= 0.5 && parseResult.items.length > 0;
+
+      const response: IngredientExtractionResult = await aiService.extractIngredientsFromRecipe({
         id: recipe.id,
         name: recipe.name,
-        instructions: recipe.instructions
+        instructions: recipe.instructions,
+        parsedIngredients: highConfidence ? parseResult.items : undefined,
+        parseConfidence: parseResult.confidence
       });
-      
-      if (result.success && result.ingredients.length > 0) {
-        // Add extracted ingredients to shopping list
-        const newItems: ShoppingListItem[] = [];
-        for (const ingredient of result.ingredients) {
-          const itemText = ingredient.amount && ingredient.unit 
-            ? `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`
-            : ingredient.name;
-          
-          try {
-            const newItem = await shoppingListService.addShoppingListItem(itemText);
-            newItems.push(newItem);
-          } catch (err) {
-            console.error('Failed to add ingredient:', err);
-          }
-        }
-        
-        setItems([...items, ...newItems]);
-        setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
-      } else {
-        // Fallback to basic ingredient extraction
-        const basicIngredients = recipeService.extractIngredients(recipe.instructions);
-        if (basicIngredients.length > 0) {
-          const newItems: ShoppingListItem[] = [];
-          for (const ingredient of basicIngredients) {
-            try {
-              const newItem = await shoppingListService.addShoppingListItem(ingredient);
-              newItems.push(newItem);
-            } catch (err) {
-              console.error('Failed to add ingredient:', err);
-            }
-          }
-          setItems([...items, ...newItems]);
-          setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
-        } else {
-          setError(result.error || 'No ingredients found in recipe');
+
+      const ingredientsToAdd = response.success && response.ingredients.length > 0
+        ? response.ingredients
+        : parseResult.items.map(item => ({
+            name: item.name,
+            quantity: item.quantityValue ?? item.quantity ?? null,
+            amount: item.quantity ?? null,
+            unit: item.unit ?? null,
+            category: item.category ?? 'other',
+            preparation: item.preparation ?? null,
+            notes: item.notes ?? null
+          }));
+
+      if (!ingredientsToAdd.length) {
+        setError(response.error || 'No ingredients found in recipe');
+        return;
+      }
+
+      const newItems: ShoppingListItem[] = [];
+      for (const ingredient of ingredientsToAdd) {
+        const quantityText = typeof ingredient.amount === 'string'
+          ? ingredient.amount
+          : (ingredient.quantity !== null && ingredient.quantity !== undefined
+              ? ingredient.quantity.toString()
+              : null);
+        const formatted = [quantityText, ingredient.unit, ingredient.name]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+
+        try {
+      const newItem = await shoppingListService.addShoppingListItem({
+        text: formatted || ingredient.name,
+        quantity: quantityText,
+        unit: ingredient.unit || null,
+        name: ingredient.name || null
+      });
+          newItems.push(newItem);
+        } catch (err) {
+          console.error('Failed to add ingredient:', err);
         }
       }
+
+      setItems([...items, ...newItems]);
+      setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
     } catch (err: any) {
       setError(err.message || 'Failed to add recipe ingredients');
     } finally {

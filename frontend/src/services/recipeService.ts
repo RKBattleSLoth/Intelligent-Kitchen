@@ -1,6 +1,6 @@
 import { Recipe, RecipeFormData, RecipeCategory } from '../types/recipe'
 import { aiService } from './aiService'
-import { parseIngredientsFromInstructions } from '../utils/ingredientParser'
+import { parseIngredientsFromInstructions, IngredientParseResult } from '../utils/ingredientParser'
 
 const STORAGE_KEY = 'intelligent-kitchen-recipes'
 
@@ -166,22 +166,18 @@ class RecipeService {
         })
       } else {
         // Fallback to basic extraction if AI fails
-        return this.extractBasicIngredients(instructions)
+        const fallback = parseIngredientsFromInstructions(instructions)
+        return fallback.items.map(item => item.text)
       }
     } catch (error) {
       console.error('AI ingredient extraction failed, using fallback:', error)
-      return this.extractBasicIngredients(instructions)
+      const fallback = parseIngredientsFromInstructions(instructions)
+      return fallback.items.map(item => item.text)
     }
   }
 
-  // Basic ingredient extraction (fallback method)
-  private extractBasicIngredients(instructions: string): string[] {
-    const { items, confidence } = parseIngredientsFromInstructions(instructions)
-    if (items.length === 0 || confidence < 0.25) {
-      return []
-    }
-
-    return items.map(item => item.text)
+  parseInstructions(instructions: string): IngredientParseResult {
+    return parseIngredientsFromInstructions(instructions)
   }
 
   private static composeInstructions(ingredients: string[], directions: string[]): string {

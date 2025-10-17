@@ -8,7 +8,7 @@ const { body, validationResult } = require('express-validator');
 const RecipeAgent = require('../services/ai/agents/RecipeAgent');
 const RecipeUrlExtractor = require('../services/ai/RecipeUrlExtractor');
 const RequestRouter = require('../services/ai/RequestRouter');
-const ResponseCache = require('../services/ai/ResponseCache');
+const { parseIngredientsFromInstructions } = require('../utils/ingredientParser');
 
 const router = express.Router();
 
@@ -16,7 +16,6 @@ const router = express.Router();
 const recipeAgent = new RecipeAgent();
 const recipeUrlExtractor = new RecipeUrlExtractor();
 const requestRouter = new RequestRouter();
-const responseCache = new ResponseCache();
 
 // Mock authentication for now (replace with real auth later)
 const mockAuth = (req, res, next) => {
@@ -33,13 +32,11 @@ router.use(mockAuth);
 router.get('/health', async (req, res) => {
   try {
     const modelInfo = requestRouter.getModelInfo();
-    const cacheHealth = await responseCache.healthCheck();
     
     res.json({
       status: 'healthy',
       services: {
-        models: modelInfo,
-        cache: cacheHealth
+        models: modelInfo
       },
       timestamp: new Date().toISOString()
     });
@@ -125,53 +122,82 @@ router.post('/extract-ingredients', [
     console.log(`API: Starting ingredient extraction for recipe: ${recipeData.name || 'Unknown'}`);
     console.log(`API: Recipe has ${recipeData.ingredients?.length || 0} input ingredients`);
 
+    const parseConfidence = options.parseConfidence || 0;
+    const parsedIngredients = Array.isArray(recipeData.ingredients)
+      ? recipeData.ingredients.filter(item => item && item.name)
+      : [];
+    
+    console.log(`API: Parsed ingredient payload contains ${parsedIngredients.length} entries`);
+
+    // If client provided confident structured data, bypass AI entirely
+    if (parsedIngredients.length > 0 && parseConfidence >= 0.5) {
+      const formatted = parsedIngredients.map(item => ({
+        name: item.name,
+        unit: item.unit || null,
+        quantity: item.quantity ?? item.quantityValue ?? null,
+        amount: typeof item.quantity === 'string' ? item.quantity : (item.quantity ?? item.quantityValue ?? null),
+        category: item.category || 'other',
+        preparation: item.preparation || null,
+        notes: item.notes || null,
+        confidence: parseConfidence
+      }));
+
+      const requestTime = Date.now() - requestStart;
+      console.log(`API: Served ${formatted.length} ingredients directly from client payload in ${requestTime}ms`);
+      return res.json({
+        success: true,
+        ingredients: formatted,
+        confidence: parseConfidence,
+        metadata: {
+          extractionMethod: 'client-parser',
+          processingTime: requestTime,
+          recipeName: recipeData.name || 'Unknown Recipe',
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+
     const result = await recipeAgent.extractIngredients(recipeData, userId, {
       ...options,
-      priority: 'fresh'
+      priority: parseConfidence >= 0.25 ? 'fresh' : 'speed',
+      useMultiAgent: parseConfidence < 0.5
     });
-    
-    // Ensure ingredients are properly formatted with quantity and unit
-    if (result.success && result.ingredients) {
-      console.log(`API: Extraction successful, formatting ${result.ingredients.length} ingredients`);
-      
-      result.ingredients = result.ingredients.map((ingredient, index) => {
-        // Filter out descriptor words that shouldn't be units
-        const descriptorUnits = ['large', 'medium', 'small', 'extra', 'jumbo', 'mini'];
-        let unit = ingredient.unit || '';
-        let name = ingredient.name || '';
-        
-        // If unit is a descriptor, move it to the name
-        if (descriptorUnits.includes(unit.toLowerCase())) {
-          name = `${unit} ${name}`.trim();
-          unit = '';
-        }
-        
-        const formatted = {
-          name: name,
-          quantity: ingredient.quantity !== null && ingredient.quantity !== undefined ? ingredient.quantity : null,
-          amount: ingredient.quantity !== null && ingredient.quantity !== undefined ? String(ingredient.quantity) : null,  // UI expects 'amount' as string
-          unit: unit,
-          category: ingredient.category || 'other',
-          preparation: ingredient.preparation || null,
-          notes: ingredient.notes || '',
-          confidence: ingredient.confidence || 0.5
-        };
-        
-        // Log any ingredients with missing quantity/unit for debugging
-        if (formatted.quantity === null || !formatted.unit) {
-          console.log(`API: Ingredient ${index + 1} "${formatted.name}" has missing data: quantity=${formatted.quantity}, unit=${formatted.unit}`);
-        }
-        
-        return formatted;
-      });
-      
+
+    if (result.success && result.ingredients?.length) {
       const requestTime = Date.now() - requestStart;
-      console.log(`API: Request completed in ${requestTime}ms with ${result.ingredients.length} ingredients`);
-    } else {
-      console.error(`API: Extraction failed: ${result.error || 'Unknown error'}`);
+      console.log(`API: Request completed in ${requestTime}ms via backend extraction`);
+      return res.json(result);
     }
+
+    // Fallback to server-side parsing when AI fails or returns empty
+    console.warn('API: Falling back to server-side parser due to empty extraction result');
+    const fallback = parseIngredientsFromInstructions(recipeData.instructions || '');
+    const fallbackFormatted = fallback.items.map(item => ({
+      name: item.name,
+      unit: item.unit || null,
+      quantity: item.quantityValue ?? item.quantity ?? null,
+      amount: item.quantity || null,
+      category: 'other',
+      preparation: null,
+      notes: null,
+      confidence: fallback.confidence
+    }));
+
+    const requestTime = Date.now() - requestStart;
+    console.log(`API: Fallback parser produced ${fallbackFormatted.length} ingredients in ${requestTime}ms`);
     
-    res.json(result);
+    res.json({
+      success: fallbackFormatted.length > 0,
+      ingredients: fallbackFormatted,
+      confidence: fallback.confidence,
+      error: result.error,
+      metadata: {
+        extractionMethod: 'server-parser',
+        processingTime: requestTime,
+        recipeName: recipeData.name || 'Unknown Recipe',
+        timestamp: new Date().toISOString()
+      }
+    });
   } catch (error) {
     const requestTime = Date.now() - requestStart;
     console.error(`Ingredient extraction error after ${requestTime}ms:`, error);

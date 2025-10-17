@@ -1,4 +1,4 @@
-const FRACTION_MAP: Record<string, string> = {
+const FRACTION_MAP = {
   '½': '1/2',
   '⅓': '1/3',
   '⅔': '2/3',
@@ -61,11 +61,10 @@ const KEYWORD_REGEX = new RegExp(`\\b(${INGREDIENT_KEYWORDS.join('|')})\\b`, 'i'
 
 const NUMBERED_LINE_REGEX = /^\d+\.\s*/;
 const BULLET_REGEX = /^[\-\*•●◦]\s*/;
-const SECTION_BREAK_REGEX = /^(directions?|instructions?|method|preparation):?$/i;
 
 const QUANTITY_REGEX = /^((?:\d+\s+\d+\/\d+)|(?:\d+\/\d+)|(?:\d*(?:\.\d+)?))(?:\s*(?:-\s*)?(?:\d+\/\d+|\d*(?:\.\d+)?))?/;
 
-function parseFraction(part: string): number | null {
+function parseFraction(part) {
   if (/^\d+\s+\d+\/\d+$/.test(part)) {
     const [whole, fraction] = part.split(/\s+/);
     const [numerator, denominator] = fraction.split('/');
@@ -81,14 +80,14 @@ function parseFraction(part: string): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function quantityStringToNumber(input: string | null): number | null {
+function quantityStringToNumber(input) {
   if (!input) return null;
   const parts = input.split('-').map(part => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
 
   const values = parts
     .map(parseFraction)
-    .filter((value): value is number => value !== null);
+    .filter(value => value !== null);
 
   if (values.length === 0) return null;
 
@@ -96,36 +95,18 @@ function quantityStringToNumber(input: string | null): number | null {
   return Math.round(average * 1000) / 1000;
 }
 
-export interface ParsedIngredient {
-  original: string;
-  text: string;
-  quantity: string | null;
-  quantityValue: number | null;
-  unit: string | null;
-  name: string;
-  category?: string | null;
-  preparation?: string | null;
-  notes?: string | null;
-}
-
-export interface IngredientParseResult {
-  items: ParsedIngredient[];
-  candidateLines: number;
-  confidence: number;
-}
-
-function normalizeFractions(input: string): string {
+function normalizeFractions(input) {
   return input.replace(UNICODE_FRACTIONS, match => FRACTION_MAP[match] || match);
 }
 
-function cleanLine(line: string): string {
+function cleanLine(line) {
   let result = normalizeFractions(line.trim());
   result = result.replace(NUMBERED_LINE_REGEX, '').trim();
   result = result.replace(BULLET_REGEX, '').trim();
   return result;
 }
 
-function looksLikeIngredient(line: string): boolean {
+function looksLikeIngredient(line) {
   if (!line) return false;
   const lower = line.toLowerCase();
   const hasQuantity = QUANTITY_REGEX.test(lower);
@@ -134,7 +115,7 @@ function looksLikeIngredient(line: string): boolean {
   return hasQuantity || hasUnit || hasKeyword;
 }
 
-function parseLine(line: string): ParsedIngredient | null {
+function parseLine(line) {
   const cleaned = cleanLine(line);
   if (!cleaned) return null;
 
@@ -143,8 +124,8 @@ function parseLine(line: string): ParsedIngredient | null {
   }
 
   let remaining = cleaned;
-  let quantity: string | null = null;
-  let unit: string | null = null;
+  let quantity = null;
+  let unit = null;
 
   const quantityMatch = remaining.match(QUANTITY_REGEX);
   if (quantityMatch && quantityMatch[0].trim()) {
@@ -163,7 +144,7 @@ function parseLine(line: string): ParsedIngredient | null {
     return null;
   }
 
-  const parts: string[] = [];
+  const parts = [];
   if (quantity) parts.push(quantity);
   if (unit) parts.push(unit);
   parts.push(name);
@@ -178,18 +159,14 @@ function parseLine(line: string): ParsedIngredient | null {
   };
 }
 
-export function parseIngredientsFromInstructions(instructions: string): IngredientParseResult {
+function parseIngredientsFromInstructions(instructions) {
   const lines = instructions.split('\n');
-  const items: ParsedIngredient[] = [];
+  const items = [];
   let candidateLines = 0;
 
   for (const line of lines) {
     const cleaned = cleanLine(line);
     if (!cleaned) continue;
-
-    if (SECTION_BREAK_REGEX.test(cleaned)) {
-      break;
-    }
 
     if (looksLikeIngredient(cleaned)) {
       candidateLines++;
@@ -209,3 +186,9 @@ export function parseIngredientsFromInstructions(instructions: string): Ingredie
     confidence
   };
 }
+
+module.exports = {
+  parseIngredientsFromInstructions,
+  cleanLine,
+  looksLikeIngredient
+};

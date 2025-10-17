@@ -5,6 +5,9 @@ export interface ShoppingListItem {
   position: number;
   created_at: string;
   updated_at: string;
+  quantity?: string | number | null;
+  unit?: string | null;
+  name?: string | null;
 }
 
 export interface ShoppingList {

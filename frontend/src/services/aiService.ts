@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { parseIngredientsFromInstructions } from '../utils/ingredientParser';
+import { ParsedIngredient } from '../utils/ingredientParser';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -147,32 +147,22 @@ class AIService {
     id: string;
     name: string;
     instructions: string;
+    parsedIngredients?: ParsedIngredient[];
+    parseConfidence?: number;
   }): Promise<IngredientExtractionResult> {
     try {
-      // First, try to extract ingredients from instructions using existing logic
-      const basicIngredients = this.extractBasicIngredients(recipe.instructions);
-      
-      // If we have basic ingredients, enhance them with AI
-      if (basicIngredients.length > 0) {
-        const response = await axios.post(`${this.baseURL}/extract-ingredients`, {
-          recipeData: {
-            name: recipe.name,
-            ingredients: basicIngredients,
-            instructions: recipe.instructions
-          }
-        });
-        return response.data;
-      } else {
-        // Fallback to AI-only extraction
-        const response = await axios.post(`${this.baseURL}/extract-ingredients`, {
-          recipeData: {
-            name: recipe.name,
-            ingredients: [],
-            instructions: recipe.instructions
-          }
-        });
-        return response.data;
-      }
+      const response = await axios.post(`${this.baseURL}/extract-ingredients`, {
+        recipeData: {
+          name: recipe.name,
+          instructions: recipe.instructions,
+          ingredients: recipe.parsedIngredients || []
+        },
+        options: {
+          parseConfidence: recipe.parseConfidence || 0,
+          parsedIngredientCount: recipe.parsedIngredients?.length || 0
+        }
+      });
+      return response.data;
     } catch (error: any) {
       console.error('Failed to extract ingredients from recipe:', error);
       return {
@@ -194,17 +184,6 @@ class AIService {
         error: error.response?.data?.error || 'Failed to extract recipe from URL'
       };
     }
-  }
-
-  /**
-   * Basic ingredient extraction (fallback method)
-   */
-  private extractBasicIngredients(instructions: string): string[] {
-    const { items, confidence } = parseIngredientsFromInstructions(instructions);
-    if (items.length === 0 || confidence < 0.25) {
-      return [];
-    }
-    return items.map(item => item.text);
   }
 
   /**
