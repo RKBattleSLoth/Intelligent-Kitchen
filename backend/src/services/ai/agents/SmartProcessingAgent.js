@@ -103,7 +103,10 @@ class SmartProcessingAgent {
     
     const cacheKey = `smart_process_${this.hashRecipeData(recipeData)}_${priority}`;
     
-    return await this.cache.wrap('smart_processing', { recipeData, options }, async () => {
+    return await this.cache.wrap(
+      'smart_processing',
+      { recipeData, options },
+      async () => {
       // Detect recipe format
       const formatType = this.detectRecipeFormat(recipeData);
       
@@ -133,7 +136,9 @@ class SmartProcessingAgent {
           : this.getProcessingSteps(formatType),
         fallbackUsed
       };
-    });
+      },
+      priority === 'fresh' ? { priority: 'fresh' } : undefined
+    );
   }
 
   /**

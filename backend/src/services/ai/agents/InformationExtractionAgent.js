@@ -100,7 +100,10 @@ class InformationExtractionAgent {
     
     const cacheKey = `info_extract_${this.hashProcessedData(processedData)}_${priority}_${targetServings}`;
     
-    return await this.cache.wrap('information_extraction', { processedData, options }, async () => {
+    return await this.cache.wrap(
+      'information_extraction',
+      { processedData, options },
+      async () => {
       // Build extraction prompt
       const prompt = this.buildExtractionPrompt(processedData, targetServings);
 
@@ -195,7 +198,9 @@ class InformationExtractionAgent {
           fallbackReason: lastError?.message
         }
       };
-    });
+      },
+      { priority: 'fresh' }
+    );
   }
 
   /**

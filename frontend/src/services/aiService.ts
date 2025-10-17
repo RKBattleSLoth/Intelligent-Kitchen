@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { parseIngredientsFromInstructions } from '../utils/ingredientParser';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -199,33 +200,11 @@ class AIService {
    * Basic ingredient extraction (fallback method)
    */
   private extractBasicIngredients(instructions: string): string[] {
-    const lines = instructions.split('\n');
-    const ingredients: string[] = [];
-    
-    let inIngredientsSection = false;
-    for (const line of lines) {
-      const trimmed = line.trim();
-      
-      if (trimmed.toLowerCase().startsWith('ingredients:')) {
-        inIngredientsSection = true;
-        const ingredientsLine = trimmed.replace(/^ingredients:/i, '').trim();
-        if (ingredientsLine) {
-          ingredients.push(ingredientsLine);
-        }
-        continue;
-      }
-      
-      if (trimmed.toLowerCase().startsWith('instructions:')) {
-        inIngredientsSection = false;
-        continue;
-      }
-      
-      if (inIngredientsSection && trimmed && !trimmed.match(/^\d+\./)) {
-        ingredients.push(trimmed);
-      }
+    const { items, confidence } = parseIngredientsFromInstructions(instructions);
+    if (items.length === 0 || confidence < 0.25) {
+      return [];
     }
-    
-    return ingredients;
+    return items.map(item => item.text);
   }
 
   /**

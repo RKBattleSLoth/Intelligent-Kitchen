@@ -125,7 +125,10 @@ router.post('/extract-ingredients', [
     console.log(`API: Starting ingredient extraction for recipe: ${recipeData.name || 'Unknown'}`);
     console.log(`API: Recipe has ${recipeData.ingredients?.length || 0} input ingredients`);
 
-    const result = await recipeAgent.extractIngredients(recipeData, userId, options);
+    const result = await recipeAgent.extractIngredients(recipeData, userId, {
+      ...options,
+      priority: 'fresh'
+    });
     
     // Ensure ingredients are properly formatted with quantity and unit
     if (result.success && result.ingredients) {

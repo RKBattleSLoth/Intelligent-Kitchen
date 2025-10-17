@@ -300,18 +300,21 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         }, '🛒 Shopping List'),
         
         // AI Status Indicator
-        aiEnabled && React.createElement('div', {
+        React.createElement('div', {
           key: 'ai-status',
           style: {
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
             fontSize: '0.875rem',
-            color: '#10b981'
+            color: aiEnabled ? '#10b981' : '#f59e0b'
           }
         }, [
-          React.createElement('span', { key: 'ai-dot' }, '🤖'),
-          React.createElement('span', { key: 'ai-text' }, 'AI Recipe Integration Available')
+          React.createElement('span', { key: 'ai-dot' }, aiEnabled ? '🤖' : '⚠️'),
+          React.createElement('span', { key: 'ai-text' }, 
+            aiEnabled 
+              ? 'AI Recipe Integration Available' 
+              : `AI ${aiStatus === 'checking' ? 'initializing...' : 'unavailable'}`)
         ])
       ]),
       
@@ -320,20 +323,27 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         style: { display: 'flex', gap: '0.5rem' }
       }, [
         // Add Recipe Ingredients Button
-        aiEnabled && React.createElement('button', {
+        React.createElement('button', {
           key: 'recipe-btn',
-          onClick: () => setShowRecipeSelector(!showRecipeSelector),
+          onClick: () => {
+            if (aiEnabled) {
+              setShowRecipeSelector(!showRecipeSelector);
+            }
+          },
+          disabled: !aiEnabled,
+          title: aiEnabled ? 'Add ingredients from your recipes' : 'AI is currently unavailable',
           style: {
-            background: showRecipeSelector ? '#8b5cf6' : '#6366f1',
+            background: aiEnabled ? (showRecipeSelector ? '#8b5cf6' : '#6366f1') : '#94a3b8',
             color: 'white',
             border: 'none',
             padding: '0.5rem 1rem',
             borderRadius: '0.375rem',
-            cursor: 'pointer',
+            cursor: aiEnabled ? 'pointer' : 'not-allowed',
             fontSize: '0.875rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.25rem'
+            gap: '0.25rem',
+            opacity: aiEnabled ? 1 : 0.6
           }
         }, ['🍳', showRecipeSelector ? 'Hide Recipes' : 'Add Recipe Ingredients']),
         

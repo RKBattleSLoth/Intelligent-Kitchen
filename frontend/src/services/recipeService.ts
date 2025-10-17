@@ -1,5 +1,6 @@
 import { Recipe, RecipeFormData, RecipeCategory } from '../types/recipe'
 import { aiService } from './aiService'
+import { parseIngredientsFromInstructions } from '../utils/ingredientParser'
 
 const STORAGE_KEY = 'intelligent-kitchen-recipes'
 
@@ -175,33 +176,12 @@ class RecipeService {
 
   // Basic ingredient extraction (fallback method)
   private extractBasicIngredients(instructions: string): string[] {
-    const lines = instructions.split('\n')
-    const ingredients: string[] = []
-    
-    let inIngredientsSection = false
-    for (const line of lines) {
-      const trimmed = line.trim()
-      
-      if (trimmed.toLowerCase().startsWith('ingredients:')) {
-        inIngredientsSection = true
-        const ingredientsLine = trimmed.replace(/^ingredients:/i, '').trim()
-        if (ingredientsLine) {
-          ingredients.push(ingredientsLine)
-        }
-        continue
-      }
-      
-      if (trimmed.toLowerCase().startsWith('instructions:')) {
-        inIngredientsSection = false
-        continue
-      }
-      
-      if (inIngredientsSection && trimmed && !trimmed.match(/^\d+\./)) {
-        ingredients.push(trimmed)
-      }
+    const { items, confidence } = parseIngredientsFromInstructions(instructions)
+    if (items.length === 0 || confidence < 0.25) {
+      return []
     }
-    
-    return ingredients
+
+    return items.map(item => item.text)
   }
 
   private static composeInstructions(ingredients: string[], directions: string[]): string {

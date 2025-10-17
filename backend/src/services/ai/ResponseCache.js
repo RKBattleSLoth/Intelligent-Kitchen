@@ -203,25 +203,32 @@ class ResponseCache {
    * Cache wrapper for AI requests
    */
   async wrap(taskType, input, requestFunction, options = {}) {
-    // Try to get from cache first
-    const cached = await this.get(taskType, input, options);
-    if (cached) {
-      if (cached.response && typeof cached.response === 'object') {
-        return {
-          ...cached.response,
-          fromCache: true,
-          cacheKey: cached.cacheKey,
-          cachedAt: cached.timestamp
-        };
+    // Sensitive tasks should bypass cache entirely
+    const shouldBypassCache = (
+      process.env.AI_DISABLE_CACHE === 'true' ||
+      options.priority === 'fresh'
+    );
+
+    if (!shouldBypassCache) {
+      const cached = await this.get(taskType, input, options);
+      if (cached) {
+        if (cached.response && typeof cached.response === 'object') {
+          return {
+            ...cached.response,
+            fromCache: true,
+            cacheKey: cached.cacheKey,
+            cachedAt: cached.timestamp
+          };
+        }
+        return cached;
       }
-      return cached;
     }
 
-    // Execute the request function
     const response = await requestFunction();
-    
-    // Cache the response
-    await this.set(taskType, input, response, options);
+
+    if (!shouldBypassCache) {
+      await this.set(taskType, input, response, options);
+    }
     
     return response;
   }

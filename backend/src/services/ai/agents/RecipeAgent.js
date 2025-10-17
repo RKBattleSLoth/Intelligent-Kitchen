@@ -23,7 +23,8 @@ class RecipeAgent {
       targetServings = 4, 
       includePreparation = true,
       forceModel = null,
-      useMultiAgent = true 
+      useMultiAgent = true,
+      priority = 'speed'
     } = options;
 
     const startTime = Date.now();
@@ -40,7 +41,7 @@ class RecipeAgent {
         targetServings,
         includePreparation,
         forceModel,
-        priority: 'speed'  // Prioritize speed over quality for ingredient extraction
+        priority
       });
       
       const totalTime = Date.now() - startTime;
