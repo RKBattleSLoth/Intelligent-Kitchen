@@ -42,7 +42,7 @@ class ValidationAgent {
           prompt: validationPrompt,
           maxTokens: 1200,
           temperature: 0.2,
-          forceModelName: process.env.OPENROUTER_MODEL_SMALL,
+          forceModelName: process.env.OPENROUTER_MODEL,
           priority: 'speed'
         });
       } catch (primaryError) {

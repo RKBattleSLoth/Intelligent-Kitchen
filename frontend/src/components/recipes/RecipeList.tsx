@@ -80,9 +80,13 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
     const url = prompt('Enter the recipe URL to import:')
     if (!url) return
 
+    const useDeepMode = confirm('Run full AI processing? Click Cancel for fast mode.')
+
     setIsImporting(true)
     try {
-      const importedRecipe = await recipeService.importRecipeFromUrl(url)
+      const importedRecipe = await recipeService.importRecipeFromUrl(url, 'Dinner', {
+        forceFull: useDeepMode
+      })
       setRecipes(prev => [...prev, importedRecipe])
       alert(`Imported "${importedRecipe.name}" successfully!`)
     } catch (error: any) {

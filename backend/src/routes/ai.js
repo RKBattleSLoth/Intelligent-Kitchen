@@ -62,12 +62,12 @@ router.post('/extract-recipe-from-url', [
       });
     }
 
-    const { url } = req.body;
+    const { url, forceFull = false } = req.body;
     const userId = req.user.id;
 
     console.log(`API: Importing recipe from URL ${url}`);
 
-    const result = await recipeUrlExtractor.extract(url, { userId });
+    const result = await recipeUrlExtractor.extract(url, { userId, forceFull });
 
     res.json({
       success: true,

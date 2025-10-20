@@ -23,7 +23,7 @@ class OpenRouterClient {
    */
   async chat(messages, options = {}) {
     const {
-      model = process.env.OPENROUTER_MODEL_MEDIUM,
+      model = process.env.OPENROUTER_MODEL,
       temperature = 0.7,
       maxTokens = 4000,
       stream = false
@@ -146,7 +146,7 @@ class OpenRouterClient {
       const result = await this.chat([
         { role: 'user', content: 'Respond with "OK" if you can read this.' }
       ], {
-        model: process.env.OPENROUTER_MODEL_SMALL,
+        model: process.env.OPENROUTER_MODEL,
         maxTokens: 10
       });
 
@@ -169,17 +169,9 @@ class OpenRouterClient {
    */
   getModelPricing() {
     return {
-      [process.env.OPENROUTER_MODEL_SMALL]: {
-        input: 0.05,  // $0.05 per 1M tokens
-        output: 0.15  // $0.15 per 1M tokens
-      },
-      [process.env.OPENROUTER_MODEL_MEDIUM]: {
-        input: 0.50,  // $0.50 per 1M tokens  
-        output: 1.50  // $1.50 per 1M tokens
-      },
-      [process.env.OPENROUTER_MODEL_LARGE]: {
-        input: 2.50,  // $2.50 per 1M tokens
-        output: 7.50  // $7.50 per 1M tokens
+      [process.env.OPENROUTER_MODEL]: {
+        input: 0.50,
+        output: 1.50
       }
     };
   }

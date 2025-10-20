@@ -1,76 +1,251 @@
 const { URL } = require('url');
 const RequestRouter = require('./RequestRouter');
 const RecipeAgent = require('./agents/RecipeAgent');
+const ResponseCache = require('./ResponseCache');
+const { parseIngredientsFromInstructions } = require('../../utils/ingredientParser');
 
 class RecipeUrlExtractor {
   constructor(options = {}) {
     this.router = options.requestRouter || new RequestRouter();
     this.recipeAgent = options.recipeAgent || new RecipeAgent();
+    this.cache = options.cache || new ResponseCache();
     this.maxContentLength = options.maxContentLength || 20000;
     this.modelName = options.modelName || process.env.OPENROUTER_RECIPE_URL_MODEL || 'anthropic/claude-3-5-haiku';
+    this.parserConfidenceThreshold = options.parserConfidenceThreshold ?? 0.5;
+    this.multiAgentThreshold = options.multiAgentThreshold ?? 0.35;
   }
 
-  async extract(url, { userId = 'url-importer' } = {}) {
+  async extract(url, { userId = 'url-importer', forceFull = false } = {}) {
     if (!url) {
       throw new Error('URL is required');
+    }
+
+    const cached = await this.getCachedResult(url, { forceFull });
+    if (cached) {
+      return cached;
     }
 
     const html = await this.fetchHtml(url);
     const structured = this.extractStructuredData(html);
     const sanitized = this.sanitizeHtml(html);
-    const truncatedContent = sanitized.slice(0, this.maxContentLength);
 
+    const content = await this.processContent(url, sanitized, structured);
+
+    const ingredientExtraction = await this.determineIngredientExtraction({
+      url,
+      userId,
+      forceFull,
+      ...content
+    });
+
+    const payload = {
+      success: true,
+      sourceUrl: url,
+      title: content.title,
+      description: content.description,
+      ingredients: content.ingredients,
+      directions: content.directions,
+      instructionsText: RecipeUrlExtractor.buildInstructionsText(content.ingredients, content.directions),
+      servings: content.servings,
+      prepTimeMinutes: content.prepTimeMinutes,
+      cookTimeMinutes: content.cookTimeMinutes,
+      totalTimeMinutes: content.totalTimeMinutes,
+      aiMetadata: content.aiMetadata,
+      structuredData: content.structuredData,
+      ingredientExtraction
+    };
+
+    await this.setCachedResult(url, payload, { forceFull });
+    return payload;
+  }
+
+  async processContent(url, sanitizedHtml, structured) {
+    const truncatedContent = sanitizedHtml.slice(0, this.maxContentLength);
     const prompt = this.buildPrompt(url, truncatedContent, structured.primary);
 
-    const aiResponse = await this.router.route('recipe_analysis', truncatedContent, {
+    const aiResponsePromise = this.router.route('recipe_analysis', truncatedContent, {
       forceModelName: this.modelName,
       maxTokens: 1200,
       temperature: 0.1,
       priority: 'speed',
       prompt
+    }).catch(error => {
+      console.warn('RecipeUrlExtractor: recipe_analysis route failed, falling back to structured data', error.message);
+      return null;
     });
 
-    const parsed = this.parseAiResponse(aiResponse.content);
+    const parserPromise = Promise.resolve().then(() => {
+      const title = structured.primary?.name || this.deriveTitleFromUrl(url);
+      const description = structured.primary?.description || '';
+      const ingredients = this.resolveList(null, structured.primary?.recipeIngredient);
+      const directions = this.resolveDirections(null, structured.primary?.recipeInstructions);
+      const parsedIngredients = this.buildParsedIngredients(ingredients, directions);
 
-    const title = parsed.title || structured.primary?.name || this.deriveTitleFromUrl(url);
-    const description = parsed.description || structured.primary?.description || '';
+      return {
+        title,
+        description,
+        ingredients,
+        directions,
+        parsedIngredients,
+        parsedConfidence: parsedIngredients.confidence,
+        servings: structured.primary?.recipeYield || null,
+        prepTimeMinutes: this.parseDuration(structured.primary?.prepTime),
+        cookTimeMinutes: this.parseDuration(structured.primary?.cookTime),
+        totalTimeMinutes: this.parseDuration(structured.primary?.totalTime),
+        aiMetadata: {
+          model: this.modelName,
+          routing: null
+        },
+        structuredData: structured.primary ? this.pickStructuredFields(structured.primary) : null
+      };
+    });
+
+    const [aiResponse, structuredFallback] = await Promise.all([aiResponsePromise, parserPromise]);
+
+    let parsed = {};
+    if (aiResponse?.content) {
+      try {
+        parsed = this.parseAiResponse(aiResponse.content);
+      } catch (error) {
+        console.warn('RecipeUrlExtractor: failed to parse AI response, using structured data fallback', error.message);
+      }
+    }
+
+    const title = parsed.title || structuredFallback.title;
+    const description = parsed.description || structuredFallback.description;
     const ingredients = this.resolveList(parsed.ingredients, structured.primary?.recipeIngredient);
     const directions = this.resolveDirections(parsed.directions, structured.primary?.recipeInstructions);
-    const instructionsText = RecipeUrlExtractor.buildInstructionsText(ingredients, directions);
 
-    let ingredientExtraction = null;
+    const parsedIngredients = this.buildParsedIngredients(ingredients, directions);
+
+    return {
+      title,
+      description,
+      ingredients,
+      directions,
+      parsedIngredients,
+      parsedConfidence: parsedIngredients.confidence,
+      servings: parsed.servings ?? structuredFallback.servings,
+      prepTimeMinutes: parsed.prepTimeMinutes ?? structuredFallback.prepTimeMinutes,
+      cookTimeMinutes: parsed.cookTimeMinutes ?? structuredFallback.cookTimeMinutes,
+      totalTimeMinutes: parsed.totalTimeMinutes ?? structuredFallback.totalTimeMinutes,
+      aiMetadata: {
+        model: aiResponse?.routing?.modelName || structuredFallback.aiMetadata.model,
+        routing: aiResponse?.routing || structuredFallback.aiMetadata.routing
+      },
+      structuredData: structuredFallback.structuredData
+    };
+  }
+
+  async determineIngredientExtraction({
+    url,
+    title,
+    description,
+    ingredients,
+    directions,
+    parsedIngredients,
+    parsedConfidence,
+    userId,
+    forceFull
+  }) {
+    const baseExtraction = {
+      success: parsedIngredients.items.length > 0,
+      source: 'parser',
+      confidence: parsedConfidence,
+      items: parsedIngredients.items,
+      routing: null
+    };
+
+    const shouldRunMultiAgent = forceFull || parsedConfidence < this.multiAgentThreshold;
+    if (!shouldRunMultiAgent || !this.recipeAgent) {
+      return baseExtraction;
+    }
+
     try {
-      ingredientExtraction = await this.recipeAgent.extractIngredients({
+      const agentResult = await this.recipeAgent.extractIngredients({
         name: title,
         description,
         ingredients,
         instructions: directions.join('\n')
       }, userId, {
         includePreparation: true,
-        priority: 'speed'
+        priority: parsedConfidence < this.multiAgentThreshold ? 'fresh' : 'speed'
       });
+
+      if (agentResult?.success && agentResult.ingredients?.length) {
+        return {
+          success: true,
+          source: 'multi-agent',
+          confidence: agentResult.confidence || parsedConfidence,
+          items: agentResult.ingredients,
+          routing: agentResult.routing || null
+        };
+      }
+
+      if (agentResult?.ingredients) {
+        return {
+          ...baseExtraction,
+          routing: agentResult.routing || null
+        };
+      }
     } catch (error) {
-      console.warn('RecipeUrlExtractor: ingredient extraction failed', error.message);
+      console.warn(`RecipeUrlExtractor: multi-agent extraction failed for ${url}`, error.message);
     }
 
+    return baseExtraction;
+  }
+
+  async getCachedResult(url, options = {}) {
+    if (!this.cache || !this.cache.isEnabled || options.forceFull) {
+      return null;
+    }
+
+    try {
+      const cached = await this.cache.get('recipe_url_import', url, { maxTokens: this.maxContentLength });
+      if (cached?.response?.payload) {
+        console.log(`RecipeUrlExtractor: Cache hit for ${url}`);
+        return { ...cached.response.payload, cached: true }; // surface cached flag for telemetry
+      }
+    } catch (error) {
+      console.warn('RecipeUrlExtractor: cache lookup failed', error.message);
+    }
+
+    return null;
+  }
+
+  async setCachedResult(url, payload, options = {}) {
+    if (!this.cache || !this.cache.isEnabled || options.forceFull) {
+      return;
+    }
+
+    try {
+      await this.cache.set('recipe_url_import', url, { payload }, { maxTokens: this.maxContentLength });
+      console.log(`RecipeUrlExtractor: Cached result for ${url}`);
+    } catch (error) {
+      console.warn('RecipeUrlExtractor: cache write failed', error.message);
+    }
+  }
+
+  buildParsedIngredients(ingredients, directions) {
+    const ingredientText = ingredients
+      .map((item, index) => `${index + 1}. ${item}`)
+      .join('\n');
+
+    const parseResult = parseIngredientsFromInstructions(ingredientText);
+
+    const structuredItems = parseResult.items.map(item => ({
+      name: item.name,
+      unit: item.unit || null,
+      quantity: item.quantityValue ?? item.quantity ?? null,
+      amount: item.quantity || null,
+      category: item.category || 'other',
+      preparation: item.preparation || null,
+      notes: item.notes || null
+    }));
+
     return {
-      success: true,
-      sourceUrl: url,
-      title,
-      description,
-      ingredients,
-      directions,
-      instructionsText,
-      servings: parsed.servings || structured.primary?.recipeYield || null,
-      prepTimeMinutes: parsed.prepTimeMinutes ?? this.parseDuration(structured.primary?.prepTime),
-      cookTimeMinutes: parsed.cookTimeMinutes ?? this.parseDuration(structured.primary?.cookTime),
-      totalTimeMinutes: parsed.totalTimeMinutes ?? this.parseDuration(structured.primary?.totalTime),
-      aiMetadata: {
-        model: aiResponse.routing?.modelName || this.modelName,
-        routing: aiResponse.routing || null
-      },
-      structuredData: structured.primary ? this.pickStructuredFields(structured.primary) : null,
-      ingredientExtraction
+      items: structuredItems,
+      confidence: parseResult.confidence
     };
   }
 

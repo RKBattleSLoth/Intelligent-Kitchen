@@ -173,9 +173,9 @@ class AIService {
     }
   }
 
-  async extractRecipeFromUrl(url: string): Promise<RecipeUrlExtractionResult> {
+  async extractRecipeFromUrl(url: string, options?: { forceFull?: boolean }): Promise<RecipeUrlExtractionResult> {
     try {
-      const response = await axios.post(`${this.baseURL}/extract-recipe-from-url`, { url });
+      const response = await axios.post(`${this.baseURL}/extract-recipe-from-url`, { url, forceFull: options?.forceFull ?? false });
       return response.data;
     } catch (error: any) {
       console.error('Failed to extract recipe from URL:', error);

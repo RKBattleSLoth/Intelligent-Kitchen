@@ -74,13 +74,13 @@ class RecipeService {
     return newRecipe
   }
 
-  async importRecipeFromUrl(url: string, category: RecipeCategory = 'Dinner'): Promise<Recipe> {
+  async importRecipeFromUrl(url: string, category: RecipeCategory = 'Dinner', options?: { forceFull?: boolean }): Promise<Recipe> {
     const trimmedUrl = url.trim()
     if (!trimmedUrl) {
       throw new Error('Recipe URL is required')
     }
 
-    const result = await aiService.extractRecipeFromUrl(trimmedUrl)
+    const result = await aiService.extractRecipeFromUrl(trimmedUrl, options)
     if (!result.success || !result.recipe) {
       throw new Error(result.error || 'Failed to import recipe from URL')
     }

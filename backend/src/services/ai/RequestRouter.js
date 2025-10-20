@@ -10,25 +10,11 @@ class RequestRouter {
     this.client = new OpenRouterClient();
     
     // Model tiers with their capabilities
-    this.models = {
-      small: {
-        name: process.env.OPENROUTER_MODEL_SMALL,
-        maxTokens: 4000,
-        capabilities: ['simple_text', 'basic_parsing', 'quick_responses'],
-        costMultiplier: 0.1
-      },
-      medium: {
-        name: process.env.OPENROUTER_MODEL_MEDIUM,
-        maxTokens: 8000,
-        capabilities: ['complex_parsing', 'ingredient_extraction', 'logic_reasoning'],
-        costMultiplier: 1.0
-      },
-      large: {
-        name: process.env.OPENROUTER_MODEL_LARGE,
-        maxTokens: 32000,
-        capabilities: ['vision', 'complex_analysis', 'multi_recipe_processing', 'advanced_reasoning'],
-        costMultiplier: 5.0
-      }
+    this.model = {
+      name: process.env.OPENROUTER_MODEL,
+      maxTokens: 16000,
+      capabilities: ['recipe_analysis', 'ingredient_extraction', 'validation', 'meal_plan_generation'],
+      costMultiplier: 1.0
     };
   }
 
@@ -36,23 +22,14 @@ class RequestRouter {
    * Route request to appropriate model based on task type and complexity
    */
   async route(taskType, input, options = {}) {
-    const { forceModel, forceModelName, priority = 'normal' } = options;
+    const { forceModelName } = options;
 
     if (forceModelName) {
       return this.executeRequestByName(forceModelName, taskType, input, options);
     }
-    
-    // If forceModel tier is specified, use it directly
-    if (forceModel && this.models[forceModel]) {
-      return this.executeRequest(forceModel, taskType, input, options);
-    }
 
-    // Determine appropriate model based on task type
-    const recommendedModel = this.selectModel(taskType, input, priority);
-    
-    console.log(`🎯 Routing ${taskType} to ${recommendedModel} model`);
-    
-    return this.executeRequest(recommendedModel, taskType, input, options);
+    console.log(`🎯 Routing ${taskType} to primary model`);
+    return this.executeRequest(taskType, input, options);
   }
 
   async executeRequestByName(modelName, taskType, input, options = {}) {
@@ -84,45 +61,8 @@ class RequestRouter {
   /**
    * Select the best model for the given task
    */
-  selectModel(taskType, input, priority) {
-    const complexity = this.assessComplexity(taskType, input);
-    
-    // Task type routing
-    const taskRouting = {
-      'simple_text': 'small',
-      'basic_parsing': 'small',
-      'ingredient_extraction': 'small',
-      'smart_processing': 'small',
-      'validation': 'small',
-      'recipe_analysis': 'medium',
-      'meal_plan_generation': 'large',
-      'vision_analysis': 'large',
-      'complex_reasoning': 'large'
-    };
-
-    let recommendedModel = taskRouting[taskType] || 'medium';
-
-    const stickToSmallTasks = new Set(['ingredient_extraction', 'smart_processing', 'validation']);
-
-    // Adjust based on complexity for tasks that can scale
-    if (!stickToSmallTasks.has(taskType)) {
-      if (complexity === 'high' && recommendedModel === 'small') {
-        recommendedModel = 'medium';
-      } else if (complexity === 'very_high' && recommendedModel !== 'large') {
-        recommendedModel = 'large';
-      }
-    }
-
-    // Adjust based on priority
-    if (priority === 'cost' && recommendedModel === 'large') {
-      recommendedModel = 'medium';
-    } else if (priority === 'speed' && recommendedModel === 'large') {
-      recommendedModel = 'medium';
-    } else if (priority === 'quality' && recommendedModel === 'small') {
-      recommendedModel = 'medium';
-    }
-
-    return recommendedModel;
+  selectModel() {
+    return this.model;
   }
 
   /**
@@ -146,11 +86,8 @@ class RequestRouter {
   /**
    * Execute the request on the specified model
    */
-  async executeRequest(modelTier, taskType, input, options = {}) {
-    const model = this.models[modelTier];
-    if (!model) {
-      throw new Error(`Unknown model tier: ${modelTier}`);
-    }
+  async executeRequest(taskType, input, options = {}) {
+    const model = this.selectModel();
 
     // Prepare messages based on task type
     const messages = this.prepareMessages(taskType, input, options);
@@ -168,7 +105,6 @@ class RequestRouter {
       return {
         ...result,
         routing: {
-          modelTier,
           modelName: model.name,
           taskType,
           complexity: this.assessComplexity(taskType, input),
@@ -177,11 +113,6 @@ class RequestRouter {
       };
 
     } catch (error) {
-      // Fallback to smaller model on failure
-      if (modelTier !== 'small') {
-        console.log(`🔄 ${model.name} failed, falling back to smaller model`);
-        return this.executeRequest('small', taskType, input, { ...options, fallback: true });
-      }
       throw error;
     }
   }
@@ -239,12 +170,7 @@ class RequestRouter {
    */
   getModelInfo() {
     return {
-      available: this.models,
-      current: {
-        small: process.env.OPENROUTER_MODEL_SMALL,
-        medium: process.env.OPENROUTER_MODEL_MEDIUM,
-        large: process.env.OPENROUTER_MODEL_LARGE
-      }
+      model: this.model.name
     };
   }
 
@@ -254,28 +180,26 @@ class RequestRouter {
   async testModels() {
     const results = {};
     
-    for (const [tier, config] of Object.entries(this.models)) {
-      try {
-        const testResult = await this.client.chat([
-          { role: 'user', content: `Test response from ${config.name}` }
-        ], {
-          model: config.name,
-          maxTokens: 10
-        });
-        
-        results[tier] = {
-          status: 'success',
-          model: config.name,
-          response: testResult.content,
-          tokens: testResult.usage?.total_tokens || 0
-        };
-      } catch (error) {
-        results[tier] = {
-          status: 'error',
-          model: config.name,
-          error: error.message
-        };
-      }
+    try {
+      const testResult = await this.client.chat([
+        { role: 'user', content: `Test response from ${this.model.name}` }
+      ], {
+        model: this.model.name,
+        maxTokens: 10
+      });
+      
+      results[this.model.name] = {
+        status: 'success',
+        model: this.model.name,
+        response: testResult.content,
+        tokens: testResult.usage?.total_tokens || 0
+      };
+    } catch (error) {
+      results[this.model.name] = {
+        status: 'error',
+        model: this.model.name,
+        error: error.message
+      };
     }
     
     return results;
