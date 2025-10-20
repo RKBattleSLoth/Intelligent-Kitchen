@@ -23,4 +23,9 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  preview: {
+    host: '0.0.0.0',
+    port: process.env.PORT ? Number(process.env.PORT) : 4173,
+    allowedHosts: ['frontend-production-479c.up.railway.app'],
+  },
 })
