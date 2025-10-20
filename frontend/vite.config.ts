@@ -19,13 +19,20 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: '0.0.0.0',
+    allowedHosts: process.env.ALLOWED_PREVIEW_HOSTS ? process.env.ALLOWED_PREVIEW_HOSTS.split(',') : ['frontend-production-479c.up.railway.app'],
+    port: process.env.PORT ? Number(process.env.PORT) : 4173,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_URL || 'http://localhost:3001/api',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,
-  },
-  preview: {
-    host: '0.0.0.0',
-    port: process.env.PORT ? Number(process.env.PORT) : 4173,
-    allowedHosts: ['frontend-production-479c.up.railway.app'],
   },
 })
