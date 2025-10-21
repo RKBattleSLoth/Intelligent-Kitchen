@@ -309,15 +309,27 @@ REQUIREMENTS:
       const isoDate = day.toISOString().split('T')[0];
       for (const mealType of mealTypes) {
         let recipe;
+        const totalMealsNeeded = days.length * mealTypes.length;
         
-        // Try to use user's recipes first
-        if (recipes && recipes.length > 0) {
+        // Mix user recipes with fallback recipes for variety
+        if (recipes && recipes.length > 0 && recipes.length >= totalMealsNeeded) {
+          // If we have enough user recipes, use them
           recipe = recipes[recipeIndex % recipes.length];
           recipeIndex++;
-        }
-
-        // If no user recipes, use our quality fallback recipes
-        if (!recipe) {
+        } else if (recipes && recipes.length > 0) {
+          // Mix user and fallback recipes to avoid repetition
+          const userRecipeCount = recipes.length;
+          if (recipeIndex < userRecipeCount * 2) {
+            // Use user recipe for first few meals
+            recipe = recipes[recipeIndex % userRecipeCount];
+          } else {
+            // Use fallback recipe for remaining meals
+            const mealTypeIndex = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'].indexOf(mealType);
+            recipe = fallbackRecipes[mealTypeIndex] || fallbackRecipes[0];
+          }
+          recipeIndex++;
+        } else {
+          // No user recipes, use our quality fallback recipes
           const mealTypeIndex = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'].indexOf(mealType);
           recipe = fallbackRecipes[mealTypeIndex] || fallbackRecipes[0]; // fallback to first recipe
         }
