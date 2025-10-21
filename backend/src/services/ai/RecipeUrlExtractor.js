@@ -15,12 +15,12 @@ class RecipeUrlExtractor {
     this.multiAgentThreshold = options.multiAgentThreshold ?? 0.35;
   }
 
-  async extract(url, { userId = 'url-importer', forceFull = false } = {}) {
+  async extract(url, { userId = 'url-importer' } = {}) {
     if (!url) {
       throw new Error('URL is required');
     }
 
-    const cached = await this.getCachedResult(url, { forceFull });
+    const cached = await this.getCachedResult(url);
     if (cached) {
       return cached;
     }
@@ -34,7 +34,6 @@ class RecipeUrlExtractor {
     const ingredientExtraction = await this.determineIngredientExtraction({
       url,
       userId,
-      forceFull,
       ...content
     });
 
@@ -55,7 +54,7 @@ class RecipeUrlExtractor {
       ingredientExtraction
     };
 
-    await this.setCachedResult(url, payload, { forceFull });
+    await this.setCachedResult(url, payload);
     return payload;
   }
 
@@ -145,8 +144,7 @@ class RecipeUrlExtractor {
     directions,
     parsedIngredients,
     parsedConfidence,
-    userId,
-    forceFull
+    userId
   }) {
     const baseExtraction = {
       success: parsedIngredients.items.length > 0,
@@ -156,7 +154,7 @@ class RecipeUrlExtractor {
       routing: null
     };
 
-    const shouldRunMultiAgent = forceFull || parsedConfidence < this.multiAgentThreshold;
+    const shouldRunMultiAgent = parsedConfidence < this.multiAgentThreshold;
     if (!shouldRunMultiAgent || !this.recipeAgent) {
       return baseExtraction;
     }
@@ -195,13 +193,13 @@ class RecipeUrlExtractor {
     return baseExtraction;
   }
 
-  async getCachedResult(url, options = {}) {
-    if (!this.cache || !this.cache.isEnabled || options.forceFull) {
+  async getCachedResult(url) {
+    if (!this.cache || !this.cache.isEnabled) {
       return null;
     }
 
     try {
-      const cached = await this.cache.get('recipe_url_import', url, { maxTokens: this.maxContentLength });
+      const cached = await this.cache.get('recipe_url_import_fast', url, { maxTokens: this.maxContentLength });
       if (cached?.response?.payload) {
         console.log(`RecipeUrlExtractor: Cache hit for ${url}`);
         return { ...cached.response.payload, cached: true }; // surface cached flag for telemetry
@@ -213,13 +211,13 @@ class RecipeUrlExtractor {
     return null;
   }
 
-  async setCachedResult(url, payload, options = {}) {
-    if (!this.cache || !this.cache.isEnabled || options.forceFull) {
+  async setCachedResult(url, payload) {
+    if (!this.cache || !this.cache.isEnabled) {
       return;
     }
 
     try {
-      await this.cache.set('recipe_url_import', url, { payload }, { maxTokens: this.maxContentLength });
+      await this.cache.set('recipe_url_import_fast', url, { payload }, { maxTokens: this.maxContentLength });
       console.log(`RecipeUrlExtractor: Cached result for ${url}`);
     } catch (error) {
       console.warn('RecipeUrlExtractor: cache write failed', error.message);

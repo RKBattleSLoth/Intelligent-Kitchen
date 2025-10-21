@@ -204,6 +204,10 @@ class RecipeOrchestrator {
   formatForShoppingList(ingredients) {
     return ingredients
       .filter(ingredient => ingredient.confidence >= 0.6)
+      .filter(ingredient => {
+        const name = (ingredient.name || '').trim().toLowerCase();
+        return name && name !== 'ingredients';
+      })
       .map(ingredient => ({
         name: ingredient.name,
         quantity: ingredient.quantity,

@@ -201,13 +201,18 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           .join(' ')
           .trim();
 
+        const ingredientName = ingredient.name?.trim();
+        if (!ingredientName || ingredientName.toLowerCase() === 'ingredients') {
+          continue;
+        }
+
         try {
-      const newItem = await shoppingListService.addShoppingListItem({
-        text: formatted || ingredient.name,
-        quantity: quantityText,
-        unit: ingredient.unit || null,
-        name: ingredient.name || null
-      });
+          const newItem = await shoppingListService.addShoppingListItem({
+            text: formatted || ingredientName,
+            quantity: quantityText,
+            unit: ingredient.unit || null,
+            name: ingredientName
+          });
           newItems.push(newItem);
         } catch (err) {
           console.error('Failed to add ingredient:', err);

@@ -30,29 +30,41 @@ class SmartMealPlanner {
     });
 
     try {
-      // Call OpenRouter to generate meal plan
       const response = await this.client.chat([
         {
           role: 'user',
           content: prompt
         }
       ], {
-        model: 'anthropic/claude-3.5-sonnet',
+        model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3.5-sonnet',
         temperature: 0.7,
         maxTokens: 4000
       });
 
-      // Parse the response
       const mealPlanData = this.parseMealPlanResponse(response);
-      
       return {
         success: true,
         mealPlan: mealPlanData,
         rawResponse: response
       };
     } catch (error) {
-      console.error('Error generating meal plan:', error);
-      throw new Error(`Failed to generate meal plan: ${error.message}`);
+      console.error('Error generating meal plan via AI:', error.message);
+      const fallback = await this.generateFallbackMealPlan({
+        userId,
+        startDate,
+        endDate,
+        mealTypes,
+        preferences,
+        recipeSource,
+        peopleCount
+      });
+      return {
+        success: true,
+        mealPlan: fallback,
+        rawResponse: null,
+        fallback: true,
+        message: 'Returned fallback meal plan due to AI unavailability'
+      };
     }
   }
 
@@ -135,6 +147,111 @@ Recipe Source: ${recipeSource}`;
         meals: []
       };
     }
+  }
+
+  async generateFallbackMealPlan({ userId, startDate, endDate, mealTypes, preferences, recipeSource, peopleCount }) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      days.push(new Date(d));
+    }
+
+    const recipes = await this.fetchRecipes(userId, recipeSource);
+    const fallbackMeals = [];
+    let recipeIndex = 0;
+
+    for (const day of days) {
+      const isoDate = day.toISOString().split('T')[0];
+      for (const mealType of mealTypes) {
+        const recipe = recipes.length ? recipes[recipeIndex % recipes.length] : null;
+        recipeIndex++;
+
+        fallbackMeals.push({
+          date: isoDate,
+          mealType,
+          name: recipe ? recipe.name : `${mealType} option`,
+          description: recipe ? recipe.description || `${mealType} from saved recipes` : `Placeholder ${mealType}`,
+          ingredients: recipe?.ingredients || [],
+          cookTime: recipe?.cook_time || recipe?.prep_time || 30,
+          difficulty: recipe?.difficulty || 'easy',
+          isUserRecipe: Boolean(recipe?.user_id),
+          userRecipeId: recipe?.id || null
+        });
+      }
+    }
+
+    return {
+      name: `${preferences?.dietary || 'Balanced'} Meal Plan`,
+      description: recipes.length
+        ? 'Generated from your saved recipes due to AI unavailability'
+        : 'Generated fallback meal suggestions',
+      meals: fallbackMeals
+    };
+  }
+
+  async fetchRecipes(userId, recipeSource) {
+    const conditions = [];
+    const values = [];
+
+    if (recipeSource === 'saved' || recipeSource === 'mixed') {
+      conditions.push('(user_id = $1 OR is_public = true)');
+      values.push(userId);
+    } else {
+      conditions.push('is_public = true');
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const result = await query(
+      `SELECT id, name, description, prep_time, cook_time, difficulty, user_id,
+              ARRAY(
+                SELECT CONCAT(ri.quantity, ' ', ru.unit_name, ' ', ing.name)
+                FROM recipe_ingredients ri
+                JOIN ingredients ing ON ri.ingredient_id = ing.id
+                LEFT JOIN recipe_units ru ON ri.unit_id = ru.id
+                WHERE ri.recipe_id = recipes.id
+              ) AS ingredients
+       FROM recipes
+       ${whereClause}
+       ORDER BY RANDOM()
+       LIMIT 50`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return [
+        {
+          name: 'Grilled Chicken with Veggies',
+          description: 'Protein-rich meal with seasonal vegetables',
+          ingredients: ['2 chicken breasts', '2 cups mixed vegetables', 'olive oil', 'salt', 'pepper'],
+          prep_time: 15,
+          cook_time: 25,
+          difficulty: 'easy',
+          user_id: null
+        },
+        {
+          name: 'Quinoa Veggie Bowl',
+          description: 'Quick vegetarian bowl with quinoa and roasted veggies',
+          ingredients: ['1 cup quinoa', '2 cups vegetables', '1 cup chickpeas', 'tahini sauce'],
+          prep_time: 20,
+          cook_time: 25,
+          difficulty: 'easy',
+          user_id: null
+        },
+        {
+          name: 'Overnight Oats',
+          description: 'Fiber-rich breakfast with berries',
+          ingredients: ['1 cup oats', '1 cup milk', '1/2 cup berries', '1 tbsp chia seeds'],
+          prep_time: 10,
+          cook_time: 0,
+          difficulty: 'easy',
+          user_id: null
+        }
+      ];
+    }
+
+    return result.rows;
   }
 
   async getMealAlternatives(options) {

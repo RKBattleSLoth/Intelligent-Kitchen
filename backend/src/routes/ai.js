@@ -62,12 +62,12 @@ router.post('/extract-recipe-from-url', [
       });
     }
 
-    const { url, forceFull = false } = req.body;
+    const { url } = req.body;
     const userId = req.user.id;
 
     console.log(`API: Importing recipe from URL ${url}`);
 
-    const result = await recipeUrlExtractor.extract(url, { userId, forceFull });
+    const result = await recipeUrlExtractor.extract(url, { userId });
 
     res.json({
       success: true,
@@ -131,7 +131,8 @@ router.post('/extract-ingredients', [
 
     // If client provided confident structured data, bypass AI entirely
     if (parsedIngredients.length > 0 && parseConfidence >= 0.5) {
-      const formatted = parsedIngredients.map(item => ({
+      const formatted = parsedIngredients
+        .map(item => ({
         name: item.name,
         unit: item.unit || null,
         quantity: item.quantity ?? item.quantityValue ?? null,
@@ -140,12 +141,17 @@ router.post('/extract-ingredients', [
         preparation: item.preparation || null,
         notes: item.notes || null,
         confidence: parseConfidence
-      }));
+        }))
+        .filter(item => {
+          const name = (item.name || '').trim().toLowerCase();
+          return name && name !== 'ingredients';
+        });
 
       const requestTime = Date.now() - requestStart;
       console.log(`API: Served ${formatted.length} ingredients directly from client payload in ${requestTime}ms`);
+
       return res.json({
-        success: true,
+        success: formatted.length > 0,
         ingredients: formatted,
         confidence: parseConfidence,
         metadata: {
@@ -164,9 +170,21 @@ router.post('/extract-ingredients', [
     });
 
     if (result.success && result.ingredients?.length) {
+      const filtered = result.ingredients.filter(item => {
+        const name = (item.name || '').trim().toLowerCase();
+        return name && name !== 'ingredients';
+      });
+
+      if (filtered.length) {
+        const responsePayload = {
+        ...result,
+        ingredients: filtered
+      };
+
       const requestTime = Date.now() - requestStart;
       console.log(`API: Request completed in ${requestTime}ms via backend extraction`);
-      return res.json(result);
+      return res.json(responsePayload);
+      }
     }
 
     // Fallback to server-side parsing when AI fails or returns empty
@@ -185,10 +203,15 @@ router.post('/extract-ingredients', [
 
     const requestTime = Date.now() - requestStart;
     console.log(`API: Fallback parser produced ${fallbackFormatted.length} ingredients in ${requestTime}ms`);
-    
+
+    const filteredFallback = fallbackFormatted.filter(item => {
+      const name = (item.name || '').trim().toLowerCase();
+      return name && name !== 'ingredients';
+    });
+
     res.json({
-      success: fallbackFormatted.length > 0,
-      ingredients: fallbackFormatted,
+      success: filteredFallback.length > 0,
+      ingredients: filteredFallback,
       confidence: fallback.confidence,
       error: result.error,
       metadata: {
