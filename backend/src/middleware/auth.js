@@ -6,14 +6,15 @@ const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  // Development mode: use first user if no token provided
-  if (!token && process.env.NODE_ENV === 'development') {
+  // Development mode: use first user if no token provided or dev token is provided
+  if ((!token || token === 'dev-token-for-local-development') && process.env.NODE_ENV === 'development') {
     try {
       const result = await query(
         'SELECT id, email, first_name, last_name, dietary_preference, health_goal FROM users LIMIT 1'
       );
       if (result.rows.length > 0) {
         req.user = result.rows[0];
+        console.log('Development auth: Using first user from database');
         return next();
       }
     } catch (error) {
