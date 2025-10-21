@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Recipe } from '../../types/recipe'
 import { recipeService } from '../../services/recipeService'
 
@@ -22,6 +22,13 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   const [isEditing, setIsEditing] = useState(false)
   const [editedRecipe, setEditedRecipe] = useState<Recipe | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Reset state when recipe changes
+  useEffect(() => {
+    setIsEditing(false)
+    setEditedRecipe(null)
+    setIsSaving(false)
+  }, [recipe])
 
   if (!isOpen || !recipe) return null
 

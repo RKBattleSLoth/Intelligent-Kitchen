@@ -103,7 +103,14 @@ Recipe Source: ${recipeSource}`;
       });
     }
 
-    prompt += `\n\nPlease generate a meal plan in the following JSON format:
+    prompt += `\n\nPlease generate a meal plan with detailed recipes. For each meal, include:
+
+1. Specific ingredient quantities (e.g., "2 cups flour" not just "flour")
+2. Step-by-step cooking instructions with temperatures and times
+3. Realistic measurements for ${peopleCount} people
+4. Complete cooking steps that someone can follow
+
+Please generate a meal plan in the following JSON format:
 {
   "name": "meal plan name",
   "description": "brief description",
@@ -113,14 +120,30 @@ Recipe Source: ${recipeSource}`;
       "mealType": "breakfast|lunch|dinner|snack|dessert",
       "name": "meal name",
       "description": "brief description",
-      "ingredients": ["ingredient1", "ingredient2"],
+      "ingredients": [
+        "2 cups all-purpose flour",
+        "1 tbsp olive oil", 
+        "2 cloves garlic, minced",
+        "1 lb chicken breast, cubed",
+        "1 cup chicken broth",
+        "2 cups mixed vegetables",
+        "1 tsp dried herbs"
+      ],
       "cookTime": 30,
       "difficulty": "easy|medium|hard",
       "isUserRecipe": false,
       "userRecipeId": null
     }
   ]
-}`;
+}
+
+IMPORTANT: 
+- Include specific quantities for ALL ingredients
+- Provide complete, step-by-step cooking instructions
+- Consider serving ${peopleCount} people in your measurements
+- Use standard cooking measurements (cups, tbsp, tsp, oz, lb, etc.)
+- Include cooking temperatures where relevant (e.g., "bake at 375°F")
+- Be specific with cooking times and techniques`;
 
     return prompt;
   }
@@ -158,66 +181,174 @@ Recipe Source: ${recipeSource}`;
     }
 
     const recipes = await this.fetchRecipes(userId, recipeSource);
-    if (!recipes || recipes.length === 0) {
-      console.warn('SmartMealPlanner: No recipes available for fallback plan');
-      return {
-        name: `${preferences?.dietary || 'Balanced'} Meal Plan`,
-        description: 'No recipes available to build a plan',
-        meals: []
-      };
-    }
     const fallbackMeals = [];
     let recipeIndex = 0;
+
+    // High-quality fallback recipes with detailed ingredients and instructions
+    const fallbackRecipes = this.getQualityFallbackRecipes(preferences, peopleCount);
 
     for (const day of days) {
       const isoDate = day.toISOString().split('T')[0];
       for (const mealType of mealTypes) {
-        const recipe = recipes.length ? recipes[recipeIndex % recipes.length] : null;
-        recipeIndex++;
-
-        if (!recipe) {
-          continue;
+        let recipe;
+        
+        // Try to use user's recipes first
+        if (recipes && recipes.length > 0) {
+          recipe = recipes[recipeIndex % recipes.length];
+          recipeIndex++;
         }
 
-        const ingredientsList = Array.isArray(recipe.ingredients)
-          ? recipe.ingredients.map(item => {
-              if (typeof item === 'string') return item;
-              if (!item || typeof item !== 'object') return null;
-              const parts = [];
-              if (item.quantity !== null && item.quantity !== undefined) {
-                parts.push(String(item.quantity));
-              }
-              if (item.unit) {
-                parts.push(item.unit);
-              }
-              if (item.name) {
-                parts.push(item.name);
-              }
-              return parts.join(' ').trim() || item.name || null;
-            }).filter(Boolean)
-          : [];
+        // If no user recipes, use our quality fallback recipes
+        if (!recipe) {
+          const mealTypeIndex = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'].indexOf(mealType);
+          recipe = fallbackRecipes[mealTypeIndex] || fallbackRecipes[0]; // fallback to first recipe
+        }
+
+        let ingredientsList;
+        let description;
+
+        if (recipe.user_id || recipe.id) {
+          // User's recipe - process ingredients
+          ingredientsList = Array.isArray(recipe.ingredients)
+            ? recipe.ingredients.map(item => {
+                if (typeof item === 'string') return item;
+                if (!item || typeof item !== 'object') return null;
+                const parts = [];
+                if (item.quantity !== null && item.quantity !== undefined) {
+                  parts.push(String(item.quantity));
+                }
+                if (item.unit) {
+                  parts.push(item.unit);
+                }
+                if (item.name) {
+                  parts.push(item.name);
+                }
+                return parts.join(' ').trim() || item.name || null;
+              }).filter(Boolean)
+            : [];
+          description = recipe.description || `${mealType} from saved recipes`;
+        } else {
+          // Fallback recipe - use predefined ingredients and description
+          ingredientsList = recipe.ingredients;
+          description = recipe.description;
+        }
 
         fallbackMeals.push({
           date: isoDate,
           mealType,
           name: recipe.name,
-          description: recipe.description || `${mealType} from saved recipes`,
+          description: description,
           ingredients: ingredientsList,
-          cookTime: recipe.cook_time || recipe.prep_time || 30,
+          cookTime: recipe.cook_time || recipe.cookTime || 30,
           difficulty: recipe.difficulty || 'easy',
-          isUserRecipe: Boolean(recipe.user_id),
+          isUserRecipe: Boolean(recipe.user_id || recipe.id),
           userRecipeId: recipe.id || null
         });
       }
     }
 
     return {
-      name: `${preferences?.dietary || 'Balanced'} Meal Plan`,
+      name: `Smart ${preferences?.dietary || 'Balanced'} Meal Plan`,
       description: recipes.length
         ? 'Generated from your saved recipes due to AI unavailability'
         : 'Generated fallback meal suggestions',
       meals: fallbackMeals
     };
+  }
+
+  getQualityFallbackRecipes(preferences, peopleCount) {
+    // Scale quantities based on people count
+    const scaleFactor = peopleCount / 4; // Base recipes are for 4 people
+    
+    return [
+      // Breakfast
+      {
+        name: "Fluffy Pancakes with Maple Syrup",
+        description: "Light and fluffy pancakes served with butter and pure maple syrup, with a side of fresh berries. Mix dry ingredients separately from wet ingredients, then combine until just mixed. Cook on a preheated griddle at 375°F for 2-3 minutes per side until golden brown and bubbles form on the surface.",
+        ingredients: [
+          `${Math.ceil(2 * scaleFactor)} cups all-purpose flour`,
+          `${Math.ceil(2 * scaleFactor)} tbsp sugar`,
+          `${Math.ceil(2 * scaleFactor)} tsp baking powder`,
+          `${Math.ceil(1 * scaleFactor)} tsp salt`,
+          `${Math.ceil(2 * scaleFactor)} eggs`,
+          `${Math.ceil(1.5 * scaleFactor)} cups milk`,
+          `${Math.ceil(4 * scaleFactor)} tbsp melted butter`,
+          `${Math.ceil(1 * scaleFactor)} tsp vanilla extract`,
+          `${Math.ceil(1 * scaleFactor)} cups mixed fresh berries`,
+          `${Math.ceil(0.5 * scaleFactor)} cup maple syrup`
+        ],
+        cookTime: 20,
+        difficulty: "easy"
+      },
+      // Lunch
+      {
+        name: "Grilled Chicken Caesar Salad",
+        description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and homemade caesar dressing. Season chicken with salt and pepper, grill for 6-7 minutes per side at medium-high heat until internal temperature reaches 165°F. Let rest for 5 minutes before slicing. Toss lettuce with dressing and top with warm chicken.",
+        ingredients: [
+          `${Math.ceil(2 * scaleFactor)} boneless chicken breasts`,
+          `${Math.ceil(2 * scaleFactor)} heads romaine lettuce`,
+          `${Math.ceil(1 * scaleFactor)} cup parmesan cheese, shredded`,
+          `${Math.ceil(2 * scaleFactor)} cups croutons`,
+          `${Math.ceil(0.5 * scaleFactor)} cup caesar dressing`,
+          `${Math.ceil(2 * scaleFactor)} cloves garlic`,
+          `${Math.ceil(2 * scaleFactor)} tbsp olive oil`,
+          `${Math.ceil(1 * scaleFactor)} lemon`,
+          `${Math.ceil(1 * scaleFactor)} tsp black pepper`
+        ],
+        cookTime: 25,
+        difficulty: "medium"
+      },
+      // Dinner
+      {
+        name: "Herb-Crusted Salmon with Roasted Vegetables",
+        description: "Pan-seared salmon with a crispy herb crust, served with roasted seasonal vegetables. Preheat oven to 400°F. Mix breadcrumbs with herbs and garlic. Press onto salmon fillets. Pan-sear for 2 minutes per side, then finish in oven for 8-10 minutes. Roast vegetables at 400°F for 20-25 minutes until tender and lightly caramelized.",
+        ingredients: [
+          `${Math.ceil(4 * scaleFactor)} salmon fillets (6 oz each)`,
+          `${Math.ceil(1 * scaleFactor)} cup panko breadcrumbs`,
+          `${Math.ceil(2 * scaleFactor)} tbsp fresh parsley, chopped`,
+          `${Math.ceil(1 * scaleFactor)} tbsp fresh dill, chopped`,
+          `${Math.ceil(2 * scaleFactor)} cloves garlic, minced`,
+          `${Math.ceil(3 * scaleFactor)} tbsp olive oil`,
+          `${Math.ceil(2 * scaleFactor)} cups mixed vegetables`,
+          `${Math.ceil(1 * scaleFactor)} lemon, cut into wedges`,
+          `${Math.ceil(1 * scaleFactor)} tsp salt`,
+          `${Math.ceil(0.5 * scaleFactor)} tsp black pepper`
+        ],
+        cookTime: 35,
+        difficulty: "medium"
+      },
+      // Snack
+      {
+        name: "Greek Yogurt Parfait",
+        description: "Layered Greek yogurt with granola, honey, and fresh fruit for a healthy snack. Layer ingredients in a clear glass: start with yogurt, then granola, then berries, repeating layers. Drizzle with honey and top with a sprinkle of nuts for crunch.",
+        ingredients: [
+          `${Math.ceil(2 * scaleFactor)} cups Greek yogurt`,
+          `${Math.ceil(1 * scaleFactor)} cup granola`,
+          `${Math.ceil(1 * scaleFactor)} cup mixed berries`,
+          `${Math.ceil(2 * scaleFactor)} tbsp honey`,
+          `${Math.ceil(0.5 * scaleFactor)} cup chopped nuts`
+        ],
+        cookTime: 5,
+        difficulty: "easy"
+      },
+      // Dessert
+      {
+        name: "Chocolate Avocado Mousse",
+        description: "Rich and creamy chocolate mousse made with avocado for a healthy twist. Blend avocados until completely smooth, then add cocoa powder, maple syrup, and vanilla extract. Blend until creamy. Fold in whipped cream for extra lightness. Chill for 30 minutes before serving. Garnish with chocolate shavings.",
+        ingredients: [
+          `${Math.ceil(2 * scaleFactor)} ripe avocados`,
+          `${Math.ceil(0.5 * scaleFactor)} cup cocoa powder`,
+          `${Math.ceil(0.5 * scaleFactor)} cup maple syrup`,
+          `${Math.ceil(0.25 * scaleFactor)} cup almond milk`,
+          `${Math.ceil(1 * scaleFactor)} tsp vanilla extract`,
+          `${Math.ceil(0.5 * scaleFactor)} tsp espresso powder`,
+          `${Math.ceil(0.25 * scaleFactor)} cup whipped cream`,
+          `${Math.ceil(2 * scaleFactor)} tbsp chocolate shavings`
+        ],
+        cookTime: 10,
+        difficulty: "easy"
+      }
+    ];
   }
 
   async fetchRecipes(userId, recipeSource) {
