@@ -185,8 +185,13 @@ class MealPlanService {
 
   // Sync AI meal plan with local storage
   syncAIMealPlan(mealPlan: any): void {
-    if (!mealPlan || !mealPlan.meals) return
+    if (!mealPlan || !mealPlan.meals) {
+      console.warn('syncAIMealPlan: No mealPlan or mealPlan.meals found')
+      return
+    }
 
+    console.log(`syncAIMealPlan: Processing ${mealPlan.meals.length} meals`)
+    let addedCount = 0
     for (const meal of mealPlan.meals) {
       if (meal.date && meal.mealType && meal.name) {
         const recipe: Recipe = {
@@ -199,8 +204,12 @@ class MealPlanService {
           cookTime: meal.cookTime || 30
         }
         this.addPlannedMeal(meal.date, meal.mealType, recipe)
+        addedCount++
+      } else {
+        console.warn('syncAIMealPlan: Meal missing required fields:', meal)
       }
     }
+    console.log(`syncAIMealPlan: Successfully added ${addedCount} meals to the plan`)
   }
 }
 

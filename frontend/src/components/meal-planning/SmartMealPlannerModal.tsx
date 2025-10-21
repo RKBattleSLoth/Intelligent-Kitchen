@@ -5,6 +5,7 @@ interface SmartMealPlannerModalProps {
   isOpen: boolean
   onClose: () => void
   onMealPlanGenerated: (mealPlan: any) => void
+  currentDate?: Date
 }
 
 interface PlanningOptions {
@@ -58,15 +59,25 @@ const CONSTRAINT_PRESETS = [
 export const SmartMealPlannerModal: React.FC<SmartMealPlannerModalProps> = ({
   isOpen,
   onClose,
-  onMealPlanGenerated
+  onMealPlanGenerated,
+  currentDate = new Date()
 }) => {
   const [activeTab, setActiveTab] = useState<'basic' | 'preferences' | 'constraints'>('basic')
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedDuration, setSelectedDuration] = useState(7)
   
+  // Calculate week start date (Sunday) to match MealPlanningPage
+  const getWeekStart = (date: Date) => {
+    const weekStart = new Date(date)
+    weekStart.setDate(date.getDate() - date.getDay())
+    return weekStart
+  }
+  
+  const weekStart = getWeekStart(currentDate)
+  
   const [options, setOptions] = useState<PlanningOptions>({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    startDate: weekStart.toISOString().split('T')[0],
+    endDate: new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     mealTypes: ['breakfast', 'lunch', 'dinner'],
     preferences: {
       dietary: 'none',

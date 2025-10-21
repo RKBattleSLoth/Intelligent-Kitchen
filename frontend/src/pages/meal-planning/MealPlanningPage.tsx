@@ -298,9 +298,13 @@ export const MealPlanningPage: React.FC = () => {
   }
 
   const handleSmartMealPlanGenerated = (result: any) => {
+    console.log('MealPlanningPage: Smart meal plan generated successfully')
     if (result.mealPlan) {
       mealPlanService.syncAIMealPlan(result.mealPlan)
       loadPlannedMeals()
+      console.log('MealPlanningPage: Meal plan synced and UI reloaded')
+    } else {
+      console.warn('MealPlanningPage: No mealPlan in result')
     }
   }
 
@@ -679,7 +683,8 @@ export const MealPlanningPage: React.FC = () => {
       key: 'smart-planner-modal',
       isOpen: showSmartPlanner,
       onClose: () => setShowSmartPlanner(false),
-      onMealPlanGenerated: handleSmartMealPlanGenerated
+      onMealPlanGenerated: handleSmartMealPlanGenerated,
+      currentDate: currentDate
     })
   ])
 }
