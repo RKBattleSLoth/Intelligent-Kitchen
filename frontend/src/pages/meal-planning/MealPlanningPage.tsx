@@ -5,6 +5,7 @@ import { mealPlanService } from '../../services/mealPlanService'
 import { recipeService } from '../../services/recipeService'
 import { RecipeForm } from '../../components/recipes/RecipeForm'
 import { SmartMealPlannerModal } from '../../components/meal-planning/SmartMealPlannerModal'
+import { RecipeViewModal } from '../../components/meal-planning/RecipeViewModal'
 
 interface RecipeSelectionModalProps {
   isOpen: boolean
@@ -228,6 +229,8 @@ export const MealPlanningPage: React.FC = () => {
   const [draggedMeal, setDraggedMeal] = useState<{ date: string; mealSlot: MealSlot; meal: PlannedMeal } | null>(null)
   const [dragOverSlot, setDragOverSlot] = useState<{ date: string; mealSlot: MealSlot } | null>(null)
   const [showSmartPlanner, setShowSmartPlanner] = useState(false)
+  const [showRecipeView, setShowRecipeView] = useState(false)
+  const [viewingRecipe, setViewingRecipe] = useState<{ recipe: Recipe; date: string; mealSlot: MealSlot } | null>(null)
 
   useEffect(() => {
     loadFilters()
@@ -305,6 +308,48 @@ export const MealPlanningPage: React.FC = () => {
       console.log('MealPlanningPage: Meal plan synced and UI reloaded')
     } else {
       console.warn('MealPlanningPage: No mealPlan in result')
+    }
+  }
+
+  // Helper function to check if a recipe is AI-generated
+  const isAIGenerated = (recipe: Recipe): boolean => {
+    return recipe.id.startsWith('ai-recipe-')
+  }
+
+  // Handle clicking on recipe name (view recipe)
+  const handleRecipeNameClick = (date: string, mealSlot: MealSlot, recipe: Recipe, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent triggering the meal slot click
+    setViewingRecipe({ recipe, date, mealSlot })
+    setShowRecipeView(true)
+  }
+
+  // Handle clicking on meal card area (change recipe)
+  const handleMealCardClick = (date: string, mealSlot: MealSlot, e: React.MouseEvent) => {
+    // Check if the click was on the recipe name or remove button
+    if ((e.target as HTMLElement).closest('.recipe-name') || 
+        (e.target as HTMLElement).closest('.remove-button')) {
+      return
+    }
+    setSelectedSlot({ date, mealSlot })
+    setShowRecipeModal(true)
+  }
+
+  // Handle saving an edited recipe
+  const handleSaveEditedRecipe = (editedRecipe: Recipe) => {
+    if (viewingRecipe) {
+      // Update the meal with the edited recipe
+      mealPlanService.addPlannedMeal(viewingRecipe.date, viewingRecipe.mealSlot, editedRecipe)
+      loadPlannedMeals()
+    }
+  }
+
+  // Handle replacing the current recipe
+  const handleReplaceMeal = () => {
+    if (viewingRecipe) {
+      setShowRecipeView(false)
+      setSelectedSlot({ date: viewingRecipe.date, mealSlot: viewingRecipe.mealSlot })
+      setShowRecipeModal(true)
+      setViewingRecipe(null)
     }
   }
 
@@ -596,7 +641,7 @@ export const MealPlanningPage: React.FC = () => {
 
           return React.createElement('div', {
             key: `${dateStr}-${mealSlot}`,
-            onClick: () => !isBeingDragged && handleMealSlotClick(dateStr, mealSlot),
+            onClick: (e: React.MouseEvent) => !isBeingDragged && !plannedMeal && handleMealSlotClick(dateStr, mealSlot, e),
             onDragOver: (e: React.DragEvent) => handleDragOver(e, dateStr, mealSlot),
             onDragLeave: handleDragLeave,
             onDrop: (e: React.DragEvent) => handleDrop(e, dateStr, mealSlot),
@@ -612,10 +657,26 @@ export const MealPlanningPage: React.FC = () => {
               cursor: plannedMeal ? 'move' : 'pointer',
               transition: 'all 0.2s',
               opacity: isBeingDragged ? 0.5 : 1,
-              transform: isBeingDragged ? 'scale(0.95)' : 'scale(1)'
+              transform: isBeingDragged ? 'scale(0.95)' : 'scale(1)',
+              position: 'relative'
             }
           }, [
             plannedMeal ? [
+              // AI/Recipe indicator
+              isAIGenerated(plannedMeal.recipe) && React.createElement('div', {
+                key: 'ai-indicator',
+                style: {
+                  position: 'absolute',
+                  top: '0.25rem',
+                  right: '0.25rem',
+                  background: '#10b981',
+                  color: 'white',
+                  fontSize: '0.625rem',
+                  padding: '0.125rem 0.375rem',
+                  borderRadius: '0.25rem',
+                  fontWeight: 'bold'
+                }
+              }, 'AI'),
               React.createElement('div', {
                 key: 'drag-indicator',
                 style: {
@@ -627,29 +688,53 @@ export const MealPlanningPage: React.FC = () => {
               }, '⋮⋮'),
               React.createElement('div', {
                 key: 'recipe-name',
+                className: 'recipe-name',
+                onClick: (e: React.MouseEvent) => handleRecipeNameClick(dateStr, mealSlot, plannedMeal.recipe, e),
                 style: {
                   fontSize: '0.875rem',
                   fontWeight: 'bold',
-                  color: '#f1f5f9',
-                  marginBottom: '0.25rem'
+                  color: isAIGenerated(plannedMeal.recipe) ? '#60a5fa' : '#f1f5f9',
+                  marginBottom: '0.25rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textDecorationStyle: 'dotted'
                 }
               }, plannedMeal.recipe.name),
-              React.createElement('button', {
-                key: 'remove',
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation()
-                  handleRemoveMeal(dateStr, mealSlot)
-                },
+              React.createElement('div', {
+                key: 'actions',
                 style: {
-                  padding: '0.25rem 0.5rem',
-                  background: '#7f1d1d',
-                  color: '#fca5a5',
-                  border: '1px solid #991b1b',
-                  borderRadius: '0.25rem',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }
-              }, 'Remove')
+              }, [
+                React.createElement('span', {
+                  key: 'change-hint',
+                  style: {
+                    fontSize: '0.75rem',
+                    color: '#64748b',
+                    cursor: 'pointer'
+                  },
+                  onClick: (e: React.MouseEvent) => handleMealCardClick(dateStr, mealSlot, e)
+                }, '🔄 Change'),
+                React.createElement('button', {
+                  key: 'remove',
+                  className: 'remove-button',
+                  onClick: (e: React.MouseEvent) => {
+                    e.stopPropagation()
+                    handleRemoveMeal(dateStr, mealSlot)
+                  },
+                  style: {
+                    padding: '0.25rem 0.5rem',
+                    background: '#7f1d1d',
+                    color: '#fca5a5',
+                    border: '1px solid #991b1b',
+                    borderRadius: '0.25rem',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer'
+                  }
+                }, 'Remove')
+              ])
             ] : [
               React.createElement('div', {
                 key: 'empty',
@@ -677,6 +762,19 @@ export const MealPlanningPage: React.FC = () => {
       onAddNewRecipe: handleAddNewRecipe,
       mealSlot: selectedSlot?.mealSlot || 'Breakfast',
       date: selectedSlot?.date || ''
+    }),
+    // Recipe View Modal
+    React.createElement(RecipeViewModal, {
+      key: 'recipe-view-modal',
+      isOpen: showRecipeView,
+      onClose: () => {
+        setShowRecipeView(false)
+        setViewingRecipe(null)
+      },
+      recipe: viewingRecipe?.recipe || null,
+      isAIGenerated: viewingRecipe ? isAIGenerated(viewingRecipe.recipe) : false,
+      onSaveRecipe: handleSaveEditedRecipe,
+      onReplaceMeal: handleReplaceMeal
     }),
     // Smart Meal Planner Modal
     React.createElement(SmartMealPlannerModal, {
