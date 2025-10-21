@@ -62,6 +62,7 @@ const KEYWORD_REGEX = new RegExp(`\\b(${INGREDIENT_KEYWORDS.join('|')})\\b`, 'i'
 const NUMBERED_LINE_REGEX = /^\d+\.\s*/;
 const BULLET_REGEX = /^[\-\*•●◦]\s*/;
 const SECTION_BREAK_REGEX = /^(directions?|instructions?|method|preparation):?$/i;
+const INGREDIENT_HEADER_REGEX = /^ingredients?(?:\s+list|\s+section)?\s*:?$/i;
 
 const QUANTITY_REGEX = /^((?:\d+\s+\d+\/\d+)|(?:\d+\/\d+)|(?:\d*(?:\.\d+)?))(?:\s*(?:-\s*)?(?:\d+\/\d+|\d*(?:\.\d+)?))?/;
 
@@ -186,6 +187,10 @@ export function parseIngredientsFromInstructions(instructions: string): Ingredie
   for (const line of lines) {
     const cleaned = cleanLine(line);
     if (!cleaned) continue;
+
+    if (INGREDIENT_HEADER_REGEX.test(cleaned)) {
+      continue;
+    }
 
     if (SECTION_BREAK_REGEX.test(cleaned)) {
       break;

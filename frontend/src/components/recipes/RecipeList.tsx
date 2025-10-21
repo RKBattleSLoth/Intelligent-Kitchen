@@ -83,8 +83,9 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
     setIsImporting(true)
     try {
       const importedRecipe = await recipeService.importRecipeFromUrl(url, 'Dinner')
-      setRecipes(prev => [...prev, importedRecipe])
-      alert(`Imported "${importedRecipe.name}" successfully!`)
+      if (importedRecipe) {
+        await loadRecipes()
+      }
     } catch (error: any) {
       console.error('Error importing recipe:', error)
       alert(error?.message || 'Failed to import recipe')

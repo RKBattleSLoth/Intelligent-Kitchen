@@ -158,6 +158,14 @@ Recipe Source: ${recipeSource}`;
     }
 
     const recipes = await this.fetchRecipes(userId, recipeSource);
+    if (!recipes || recipes.length === 0) {
+      console.warn('SmartMealPlanner: No recipes available for fallback plan');
+      return {
+        name: `${preferences?.dietary || 'Balanced'} Meal Plan`,
+        description: 'No recipes available to build a plan',
+        meals: []
+      };
+    }
     const fallbackMeals = [];
     let recipeIndex = 0;
 
@@ -167,16 +175,38 @@ Recipe Source: ${recipeSource}`;
         const recipe = recipes.length ? recipes[recipeIndex % recipes.length] : null;
         recipeIndex++;
 
+        if (!recipe) {
+          continue;
+        }
+
+        const ingredientsList = Array.isArray(recipe.ingredients)
+          ? recipe.ingredients.map(item => {
+              if (typeof item === 'string') return item;
+              if (!item || typeof item !== 'object') return null;
+              const parts = [];
+              if (item.quantity !== null && item.quantity !== undefined) {
+                parts.push(String(item.quantity));
+              }
+              if (item.unit) {
+                parts.push(item.unit);
+              }
+              if (item.name) {
+                parts.push(item.name);
+              }
+              return parts.join(' ').trim() || item.name || null;
+            }).filter(Boolean)
+          : [];
+
         fallbackMeals.push({
           date: isoDate,
           mealType,
-          name: recipe ? recipe.name : `${mealType} option`,
-          description: recipe ? recipe.description || `${mealType} from saved recipes` : `Placeholder ${mealType}`,
-          ingredients: recipe?.ingredients || [],
-          cookTime: recipe?.cook_time || recipe?.prep_time || 30,
-          difficulty: recipe?.difficulty || 'easy',
-          isUserRecipe: Boolean(recipe?.user_id),
-          userRecipeId: recipe?.id || null
+          name: recipe.name,
+          description: recipe.description || `${mealType} from saved recipes`,
+          ingredients: ingredientsList,
+          cookTime: recipe.cook_time || recipe.prep_time || 30,
+          difficulty: recipe.difficulty || 'easy',
+          isUserRecipe: Boolean(recipe.user_id),
+          userRecipeId: recipe.id || null
         });
       }
     }
@@ -195,25 +225,36 @@ Recipe Source: ${recipeSource}`;
     const values = [];
 
     if (recipeSource === 'saved' || recipeSource === 'mixed') {
-      conditions.push('(user_id = $1 OR is_public = true)');
+      conditions.push('(recipes.user_id = $1 OR recipes.is_public = true)');
       values.push(userId);
     } else {
-      conditions.push('is_public = true');
+      conditions.push('recipes.is_public = true');
     }
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    conditions.push('recipes.instructions IS NOT NULL');
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     const result = await query(
-      `SELECT id, name, description, prep_time, cook_time, difficulty, user_id,
-              ARRAY(
-                SELECT CONCAT(ri.quantity, ' ', ru.unit_name, ' ', ing.name)
-                FROM recipe_ingredients ri
-                JOIN ingredients ing ON ri.ingredient_id = ing.id
-                LEFT JOIN recipe_units ru ON ri.unit_id = ru.id
-                WHERE ri.recipe_id = recipes.id
-              ) AS ingredients
+      `SELECT recipes.id,
+              recipes.name,
+              recipes.description,
+              recipes.prep_time,
+              recipes.cook_time,
+              recipes.difficulty,
+              recipes.user_id,
+              recipes.instructions,
+              COALESCE(json_agg(
+                json_build_object(
+                  'name', ri.name,
+                  'quantity', ri.quantity,
+                  'unit', ri.unit,
+                  'notes', ri.notes
+                )
+              ) FILTER (WHERE ri.id IS NOT NULL), '[]') AS ingredients
        FROM recipes
+       LEFT JOIN recipe_ingredients ri ON ri.recipe_id = recipes.id
        ${whereClause}
+       GROUP BY recipes.id
        ORDER BY RANDOM()
        LIMIT 50`,
       values

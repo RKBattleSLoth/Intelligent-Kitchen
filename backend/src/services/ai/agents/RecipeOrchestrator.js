@@ -206,7 +206,10 @@ class RecipeOrchestrator {
       .filter(ingredient => ingredient.confidence >= 0.6)
       .filter(ingredient => {
         const name = (ingredient.name || '').trim().toLowerCase();
-        return name && name !== 'ingredients';
+        if (!name || name === 'ingredients') {
+          return false;
+        }
+        return !['instructions', 'directions'].includes(name);
       })
       .map(ingredient => ({
         name: ingredient.name,

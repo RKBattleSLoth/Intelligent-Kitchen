@@ -172,19 +172,24 @@ router.post('/extract-ingredients', [
     if (result.success && result.ingredients?.length) {
       const filtered = result.ingredients.filter(item => {
         const name = (item.name || '').trim().toLowerCase();
-        return name && name !== 'ingredients';
+        if (!name || name === 'ingredients') {
+          return false;
+        }
+        return !['instructions', 'directions'].includes(name);
       });
 
-      if (filtered.length) {
-        const responsePayload = {
+      const responsePayload = {
         ...result,
-        ingredients: filtered
+        ingredients: filtered,
+        summary: {
+          ...(result.summary || {}),
+          totalIngredients: filtered.length
+        }
       };
 
       const requestTime = Date.now() - requestStart;
       console.log(`API: Request completed in ${requestTime}ms via backend extraction`);
       return res.json(responsePayload);
-      }
     }
 
     // Fallback to server-side parsing when AI fails or returns empty
@@ -206,7 +211,10 @@ router.post('/extract-ingredients', [
 
     const filteredFallback = fallbackFormatted.filter(item => {
       const name = (item.name || '').trim().toLowerCase();
-      return name && name !== 'ingredients';
+      if (!name || name === 'ingredients') {
+        return false;
+      }
+      return !['instructions', 'directions'].includes(name);
     });
 
     res.json({

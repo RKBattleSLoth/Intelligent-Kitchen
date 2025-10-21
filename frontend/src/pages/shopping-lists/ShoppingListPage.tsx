@@ -202,7 +202,12 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           .trim();
 
         const ingredientName = ingredient.name?.trim();
-        if (!ingredientName || ingredientName.toLowerCase() === 'ingredients') {
+        if (!ingredientName) {
+          continue;
+        }
+
+        const normalizedName = ingredientName.toLowerCase();
+        if (['ingredients', 'instructions', 'directions'].includes(normalizedName)) {
           continue;
         }
 
