@@ -18,6 +18,11 @@ class SmartMealPlanner {
       peopleCount = 4
     } = options;
 
+    // Calculate dayCount for both AI and fallback
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
+
     // Build the prompt for meal planning
     const prompt = this.buildMealPlanPrompt({
       startDate,
@@ -41,7 +46,37 @@ class SmartMealPlanner {
         maxTokens: 4000
       });
 
-      const mealPlanData = this.parseMealPlanResponse(response);
+      let mealPlanData;
+      try {
+        mealPlanData = this.parseMealPlanResponse(response, dayCount, mealTypes);
+      } catch (parseError) {
+        console.error('JSON parsing error, using fallback:', parseError.message);
+        // AI responded but JSON parsing failed - use fallback instead
+        mealPlanData = null;
+      }
+      
+      // If parsing failed or no meals, use fallback
+      if (!mealPlanData || !mealPlanData.meals || mealPlanData.meals.length === 0) {
+        console.log('Using fallback due to AI response issues');
+        const fallback = await this.generateFallbackMealPlan({
+          userId,
+          startDate,
+          endDate,
+          mealTypes,
+          preferences,
+          recipeSource,
+          peopleCount
+        });
+        
+        return {
+          success: true,
+          mealPlan: fallback,
+          rawResponse: response,
+          fallback: true,
+          message: 'Returned fallback meal plan due to AI parsing issues'
+        };
+      }
+      
       return {
         success: true,
         mealPlan: mealPlanData,
@@ -83,7 +118,20 @@ class SmartMealPlanner {
     const endDateObj = new Date(endDate);
     const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
 
-    let prompt = `Generate a ${dayCount}-day meal plan from ${startDate} to ${endDate} for ${peopleCount} people.
+    let prompt = `GENERATE A COMPLETE ${dayCount}-DAY MEAL PLAN FROM ${startDate} TO ${endDate} FOR ${peopleCount} PEOPLE. 
+
+🚨 EXTREMELY IMPORTANT: You MUST generate EXACTLY ${dayCount * mealTypes.length} MEALS - ${dayCount} days × ${mealTypes.length} meal types each.
+🚨 DO NOT generate partial plans or fewer days - this must be a COMPLETE ${dayCount}-day plan.
+🚨 Each day (${startDate} to ${endDate}) MUST include ALL meal types: ${mealTypes.join(', ')}.
+
+REQUIRED FORMAT: For EACH day from ${startDate} to ${endDate}, you MUST provide:
+- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal
+- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal  
+- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal
+
+TOTAL MEALS REQUIRED: ${dayCount * mealTypes.length}. DO NOT PROCEED UNTIL YOU HAVE GENERATED ALL MEALS.
+
+Now generate the complete ${dayCount}-day meal plan:
 
 Meal Types to Include: ${mealTypes.join(', ')}
 
@@ -106,9 +154,17 @@ Recipe Source: ${recipeSource}`;
     prompt += `\n\nPlease generate a meal plan with detailed recipes. For each meal, include:
 
 1. Specific ingredient quantities (e.g., "2 cups flour" not just "flour")
-2. Step-by-step cooking instructions with temperatures and times
+2. Multi-step, numbered cooking instructions with temperatures and times
 3. Realistic measurements for ${peopleCount} people
-4. Complete cooking steps that someone can follow
+4. Complete cooking steps that someone can follow exactly
+
+CRITICAL: Each recipe MUST have detailed step-by-step instructions formatted as:
+
+"Step 1: [Action description] (e.g., Preheat oven to 400°F and prepare ingredients)
+Step 2: [Action description] (e.g., Heat oil in large skillet over medium-high heat)
+Step 3: [Action description] (e.g., Add chicken and cook for 5-7 minutes until golden)
+Step 4: [Action description] (e.g., Add vegetables and sauce, simmer for 10 minutes)
+Step 5: [Action description] (e.g., Serve immediately with garnish)"
 
 Please generate a meal plan in the following JSON format:
 {
@@ -119,7 +175,8 @@ Please generate a meal plan in the following JSON format:
       "date": "YYYY-MM-DD",
       "mealType": "breakfast|lunch|dinner|snack|dessert",
       "name": "meal name",
-      "description": "brief description",
+      "description": "brief description of the meal",
+      "instructions": "Step 1: [First action] Step 2: [Second action] Step 3: [Third action] Step 4: [Fourth action] Step 5: [Fifth action]",
       "ingredients": [
         "2 cups all-purpose flour",
         "1 tbsp olive oil", 
@@ -137,37 +194,98 @@ Please generate a meal plan in the following JSON format:
   ]
 }
 
-IMPORTANT: 
+REQUIREMENTS:
 - Include specific quantities for ALL ingredients
-- Provide complete, step-by-step cooking instructions
+- Each recipe MUST have 3+ numbered steps with clear actions
+- Include cooking temperatures (e.g., "Preheat oven to 400°F")
+- Include specific cooking times (e.g., "simmer for 10 minutes")
 - Consider serving ${peopleCount} people in your measurements
 - Use standard cooking measurements (cups, tbsp, tsp, oz, lb, etc.)
-- Include cooking temperatures where relevant (e.g., "bake at 375°F")
-- Be specific with cooking times and techniques`;
+- Steps should be actionable and easy to follow
+- Include preparation steps, cooking steps, and finishing steps`;
 
     return prompt;
   }
 
-  parseMealPlanResponse(response) {
+  parseMealPlanResponse(response, dayCount, mealTypes) {
     try {
       // Extract content from the response
       const content = response.content || response;
       
-      // Try to find JSON in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+      // Clean up common JSON issues
+      let cleanedContent = content
+        // Remove any content before the JSON
+        .replace(/^[^{]*\{/, '{')
+        // Remove any content after the JSON
+        .replace(/\}[^}]*$/, '}')
+        // Fix common escaping issues in instructions
+        .replace(/\\n/g, '\\\\n')
+        .replace(/\\r/g, '\\\\r')
+        .replace(/\\t/g, '\\\\t');
+      
+      // Try different JSON extraction methods
+      let mealPlan = null;
+      
+      // Method 1: Look for JSON code block
+      const codeBlockMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        mealPlan = JSON.parse(codeBlockMatch[1]);
+      } else {
+        // Method 2: Look for JSON object (more robust)
+        const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            mealPlan = JSON.parse(jsonMatch[0]);
+          } catch (parseError) {
+            console.warn('JSON parse failed, trying alternative methods');
+            // Method 3: Try to fix common JSON issues
+            let fixedJson = jsonMatch[0]
+              // Fix escaped quotes in instructions
+              .replace(/"([^"]*)\\n([^"]*)\\n([^"]*)"/g, '"$1\\\\n$2\\\\n$3"')
+              // Fix other escaping issues
+              .replace(/\\\\/g, '\\');
+            
+            mealPlan = JSON.parse(fixedJson);
+          }
+        } else {
+          // Method 4: Try parsing entire content as JSON
+          try {
+            mealPlan = JSON.parse(cleanedContent.trim());
+          } catch (e) {
+            throw new Error('No valid JSON found in response');
+          }
+        }
+      }
+      
+      // Validate the parsed structure
+      if (!mealPlan || !mealPlan.meals || !Array.isArray(mealPlan.meals)) {
+        console.warn('Invalid meal plan structure:', mealPlan);
+        throw new Error('Invalid meal plan structure');
       }
 
-      const mealPlan = JSON.parse(jsonMatch[0]);
+      // Log meal count for debugging
+      console.log(`Parsed meal plan with ${mealPlan.meals.length} meals for meal types: ${mealTypes.join(', ')}`);
+      
+      // Verify we have the expected number of meals
+      const expectedMeals = dayCount * mealTypes.length;
+      if (mealPlan.meals.length !== expectedMeals) {
+        console.warn(`Meal count mismatch: expected ${expectedMeals}, got ${mealPlan.meals.length}`);
+        // Don't throw error, just continue with what we have
+      }
+      
       return mealPlan;
     } catch (error) {
       console.error('Error parsing meal plan response:', error);
-      // Return a fallback structure
+      console.error('Response content sample:', (response.content || response).substring(0, 500) + '...');
+      
+      // Return a fallback structure for JSON parsing errors
+      // The actual fallback will be used in the catch block of generateMealPlan
       return {
         name: 'AI Generated Meal Plan',
-        description: 'AI-generated meal plan',
-        meals: []
+        description: 'AI-generated meal plan (JSON parsing error)',
+        meals: [],
+        fallback: true,
+        parsingError: true
       };
     }
   }
