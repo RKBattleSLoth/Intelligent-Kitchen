@@ -231,6 +231,8 @@ export const MealPlanningPage: React.FC = () => {
   const [showSmartPlanner, setShowSmartPlanner] = useState(false)
   const [showRecipeView, setShowRecipeView] = useState(false)
   const [viewingRecipe, setViewingRecipe] = useState<{ recipe: Recipe; date: string; mealSlot: MealSlot } | null>(null)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [clearAction, setClearAction] = useState<string | null>(null)
 
   useEffect(() => {
     loadFilters()
@@ -350,6 +352,88 @@ export const MealPlanningPage: React.FC = () => {
       setSelectedSlot({ date: viewingRecipe.date, mealSlot: viewingRecipe.mealSlot })
       setShowRecipeModal(true)
       setViewingRecipe(null)
+    }
+  }
+
+  // Clear action handlers
+  const handleClearWeek = () => {
+    const startDate = new Date(currentDate)
+    startDate.setDate(startDate.getDate() - startDate.getDay()) // Start of week
+    const start = startDate.toISOString().split('T')[0]
+    
+    const endDate = new Date(startDate)
+    endDate.setDate(startDate.getDate() + 6)
+    const end = endDate.toISOString().split('T')[0]
+    
+    mealPlanService.clearMealPlansForWeek(start, end)
+    loadPlannedMeals()
+    setShowClearConfirm(false)
+    setClearAction(null)
+  }
+
+  const handleClearAll = () => {
+    mealPlanService.clearAllMealPlans()
+    loadPlannedMeals()
+    setShowClearConfirm(false)
+    setClearAction(null)
+  }
+
+  const handleClearDay = (date: string) => {
+    mealPlanService.clearMealPlansForDate(date)
+    loadPlannedMeals()
+    setShowClearConfirm(false)
+    setClearAction(null)
+  }
+
+  const handleClearMealType = (mealSlot: string) => {
+    mealPlanService.clearMealsForType(mealSlot)
+    loadPlannedMeals()
+    setShowClearConfirm(false)
+    setClearAction(null)
+  }
+
+  const handleClearAIRecipes = () => {
+    const aiCount = mealPlanService.getAIRecipeCount()
+    if (aiCount === 0) {
+      alert('No AI-generated recipes found to clear.')
+      setShowClearConfirm(false)
+      setClearAction(null)
+      return
+    }
+    
+    if (confirm(`This will remove ${aiCount} AI-generated recipe(s) from your meal plan. Continue?`)) {
+      mealPlanService.clearAIRecipes()
+      loadPlannedMeals()
+      setShowClearConfirm(false)
+      setClearAction(null)
+    }
+  }
+
+  const handleClearConfirm = (action: string) => {
+    setClearAction(action)
+    setShowClearConfirm(true)
+  }
+
+  const executeClearAction = () => {
+    switch (clearAction) {
+      case 'week':
+        handleClearWeek()
+        break
+      case 'all':
+        handleClearAll()
+        break
+      case 'breakfast':
+      case 'lunch':
+      case 'dinner':
+      case 'snack':
+      case 'dessert':
+        handleClearMealType(clearAction)
+        break
+      case 'ai':
+        handleClearAIRecipes()
+        break
+      default:
+        break
     }
   }
 
@@ -476,15 +560,19 @@ export const MealPlanningPage: React.FC = () => {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '2rem'
+        marginBottom: '2rem',
+        flexWrap: 'wrap',
+        gap: '1rem'
       }
     }, [
       React.createElement('h1', {
         key: 'title',
         style: { fontSize: '2rem', fontWeight: 'bold', color: '#f1f5f9' }
       }, '📅 Meal Planning'),
+      
+      // Left navigation buttons
       React.createElement('div', {
-        key: 'navigation',
+        key: 'navigation-left',
         style: { display: 'flex', gap: '1rem', alignItems: 'center' }
       }, [
         React.createElement('button', {
@@ -527,7 +615,14 @@ export const MealPlanningPage: React.FC = () => {
             borderRadius: '0.375rem',
             cursor: 'pointer'
           }
-        }, 'Next →'),
+        }, 'Next →')
+      ]),
+      
+      // Center buttons
+      React.createElement('div', {
+        key: 'center-buttons',
+        style: { display: 'flex', gap: '0.5rem', alignItems: 'center' }
+      }, [
         React.createElement('button', {
           key: 'smart-planner',
           onClick: () => setShowSmartPlanner(true),
@@ -541,6 +636,65 @@ export const MealPlanningPage: React.FC = () => {
             fontWeight: 'bold'
           }
         }, '🤖 Smart Meal Plan')
+      ]),
+      
+      // Right clear buttons
+      React.createElement('div', {
+        key: 'clear-buttons',
+        style: { display: 'flex', gap: '0.5rem', alignItems: 'center' }
+      }, [
+        React.createElement('div', {
+          key: 'clear-dropdown',
+          style: { position: 'relative', display: 'inline-block' }
+        }, [
+          React.createElement('button', {
+            key: 'clear-main',
+            onClick: () => handleClearConfirm('week'),
+            style: {
+              padding: '0.5rem 1rem',
+              background: '#dc2626',
+              color: 'white',
+              border: '1px solid #b91c1c',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              marginRight: '0.5rem'
+            }
+          }, '🗑️ Clear Week'),
+          
+          // Additional clear options (you can uncomment these if desired)
+          /*
+          React.createElement('button', {
+            key: 'clear-all',
+            onClick: () => handleClearConfirm('all'),
+            style: {
+              padding: '0.5rem 0.75rem',
+              background: '#ef4444',
+              color: 'white',
+              border: '1px solid #dc2626',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            },
+            title: 'Clear all meal plans'
+          }, 'All'),
+          
+          React.createElement('button', {
+            key: 'clear-ai',
+            onClick: handleClearAIRecipes,
+            style: {
+              padding: '0.5rem 0.75rem',
+              background: '#f97316',
+              color: 'white',
+              border: '1px solid #ea580c',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            },
+            title: 'Clear AI-generated recipes only'
+          }, 'AI')
+          */
+        ])
       ])
     ]),
 
@@ -776,6 +930,88 @@ export const MealPlanningPage: React.FC = () => {
       onSaveRecipe: handleSaveEditedRecipe,
       onReplaceMeal: handleReplaceMeal
     }),
+    // Clear Confirmation Modal
+    showClearConfirm && React.createElement('div', {
+      key: 'clear-confirm-modal',
+      style: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000
+      }
+    }, [
+      React.createElement('div', {
+        key: 'modal',
+        style: {
+          background: '#1e293b',
+          border: '1px solid #334155',
+          borderRadius: '0.5rem',
+          padding: '2rem',
+          maxWidth: '400px',
+          width: '90%',
+          textAlign: 'center'
+        }
+      }, [
+        React.createElement('h3', {
+          key: 'title',
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9', marginBottom: '1rem' }
+        }, 'Confirm Clear Action'),
+        
+        React.createElement('p', {
+          key: 'message',
+          style: { color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.5' }
+        }, 
+          clearAction === 'week' ? 'Are you sure you want to clear all meals for the current week? This action cannot be undone.' :
+          clearAction === 'all' ? 'Are you sure you want to clear ALL meal plans? This will delete all your saved meal planning data and cannot be undone.' :
+          `Are you sure you want to clear all ${clearAction} meals? This action cannot be undone.`
+        ),
+        
+        React.createElement('div', {
+          key: 'actions',
+          style: {
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '1rem'
+          }
+        }, [
+          React.createElement('button', {
+            key: 'cancel',
+            onClick: () => {
+              setShowClearConfirm(false)
+              setClearAction(null)
+            },
+            style: {
+              padding: '0.75rem 1.5rem',
+              background: '#374151',
+              color: '#f1f5f9',
+              border: '1px solid #4b5563',
+              borderRadius: '0.375rem',
+              cursor: 'pointer'
+            }
+          }, 'Cancel'),
+          React.createElement('button', {
+            key: 'confirm',
+            onClick: executeClearAction,
+            style: {
+              padding: '0.75rem 1.5rem',
+              background: '#dc2626',
+              color: 'white',
+              border: '1px solid #b91c1c',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }
+          }, 'Clear')
+        ])
+      ])
+    ]),
+    
     // Smart Meal Planner Modal
     React.createElement(SmartMealPlannerModal, {
       key: 'smart-planner-modal',

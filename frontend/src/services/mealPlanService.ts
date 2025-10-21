@@ -131,6 +131,68 @@ class MealPlanService {
     this.saveToStorage()
   }
 
+  // Clear meal plans for a specific date range (week)
+  clearMealPlansForWeek(startDate: string, endDate: string): void {
+    this.mealPlans = this.mealPlans.filter(plan => 
+      plan.date < startDate || plan.date > endDate
+    )
+    this.saveToStorage()
+  }
+
+  // Clear meal plans for a specific date
+  clearMealPlansForDate(date: string): void {
+    this.mealPlans = this.mealPlans.filter(plan => plan.date !== date)
+    this.saveToStorage()
+  }
+
+  // Clear all meals of a specific type across all dates
+  clearMealsForType(mealSlot: string): void {
+    this.mealPlans.forEach(plan => {
+      plan.meals = plan.meals.filter(meal => meal.mealSlot !== mealSlot)
+    })
+    
+    // Remove empty meal plans
+    this.mealPlans = this.mealPlans.filter(plan => plan.meals.length > 0)
+    this.saveToStorage()
+  }
+
+  // Clear only AI-generated recipes (keep user recipes)
+  clearAIRecipes(): void {
+    this.mealPlans.forEach(plan => {
+      plan.meals = plan.meals.filter(meal => !meal.recipe.id.startsWith('ai-recipe-'))
+    })
+    
+    // Remove empty meal plans
+    this.mealPlans = this.mealPlans.filter(plan => plan.meals.length > 0)
+    this.saveToStorage()
+  }
+
+  // Get count of AI-generated recipes
+  getAIRecipeCount(): number {
+    let count = 0
+    this.mealPlans.forEach(plan => {
+      plan.meals.forEach(meal => {
+        if (meal.recipe.id.startsWith('ai-recipe-')) {
+          count++
+        }
+      })
+    })
+    return count
+  }
+
+  // Get count of user recipes
+  getUserRecipeCount(): number {
+    let count = 0
+    this.mealPlans.forEach(plan => {
+      plan.meals.forEach(meal => {
+        if (!meal.recipe.id.startsWith('ai-recipe-')) {
+          count++
+        }
+      })
+    })
+    return count
+  }
+
   // Get meal planning preferences
   async getMealPlanningPreferences() {
     try {
