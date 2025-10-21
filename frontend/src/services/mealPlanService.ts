@@ -183,6 +183,18 @@ class MealPlanService {
     }
   }
 
+  // Helper function to convert mealType from API (lowercase) to frontend format (Title Case)
+  private normalizeMealType(mealType: string): string {
+    const mealTypeMap: { [key: string]: string } = {
+      'breakfast': 'Breakfast',
+      'lunch': 'Lunch',
+      'dinner': 'Dinner',
+      'snack': 'Snack',
+      'dessert': 'Dessert'
+    }
+    return mealTypeMap[mealType] || mealType.charAt(0).toUpperCase() + mealType.slice(1)
+  }
+
   // Sync AI meal plan with local storage
   syncAIMealPlan(mealPlan: any): void {
     if (!mealPlan || !mealPlan.meals) {
@@ -194,16 +206,18 @@ class MealPlanService {
     let addedCount = 0
     for (const meal of mealPlan.meals) {
       if (meal.date && meal.mealType && meal.name) {
+        const normalizedMealType = this.normalizeMealType(meal.mealType)
         const recipe: Recipe = {
           id: `ai-recipe-${meal.date}-${meal.mealType}`,
           name: meal.name,
-          category: meal.mealType as any,
+          category: normalizedMealType as any,
           instructions: meal.description || meal.name,
           ingredients: meal.ingredients || [],
           prepTime: meal.cookTime || 30,
           cookTime: meal.cookTime || 30
         }
-        this.addPlannedMeal(meal.date, meal.mealType, recipe)
+        console.log(`syncAIMealPlan: Adding meal for ${meal.date} - ${normalizedMealType}: ${meal.name}`)
+        this.addPlannedMeal(meal.date, normalizedMealType, recipe)
         addedCount++
       } else {
         console.warn('syncAIMealPlan: Meal missing required fields:', meal)
