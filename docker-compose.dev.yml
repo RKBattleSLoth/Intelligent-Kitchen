@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: kitchen_user_dev
       POSTGRES_PASSWORD: kitchen_password_dev
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
@@ -39,7 +39,7 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://kitchen_user_dev:kitchen_password_dev@postgres:5432/intelligent_kitchen_dev
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-super-secret-jwt-key
+      JWT_SECRET: dev-super-secret-jwt-key-32chars-minimum-abcdef1234567890
       FRONTEND_URL: http://localhost:5173
     ports:
       - "3001:3001"
@@ -49,6 +49,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - ./database:/database
     networks:
       - kitchen-network-dev
     command: npm run dev
