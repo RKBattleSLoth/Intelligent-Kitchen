@@ -24,10 +24,14 @@ const authenticateToken = async (req, res, next) => {
 
   // Production mode: handle missing token gracefully for certain endpoints
   if (!token) {
+    const baseUrl = req.baseUrl || '';
+    const originalUrl = req.originalUrl || '';
+    const path = req.path || '';
+
     const isMealPlanRequest =
-      (req.baseUrl && req.baseUrl.includes('/meal-plans')) ||
-      (req.originalUrl && req.originalUrl.includes('/meal-plans')) ||
-      (req.path && req.path.includes('/meal-plans'));
+      baseUrl.includes('/meal-plans') ||
+      originalUrl.includes('/meal-plans') ||
+      path.includes('/meal-plans');
 
     // For Smart Meal Planning, provide a default user in production when token is missing
     if (isMealPlanRequest && process.env.NODE_ENV === 'production') {
@@ -44,11 +48,20 @@ const authenticateToken = async (req, res, next) => {
         console.warn('Production auth fallback for meal plans failed:', error.message);
       }
     }
-    
+
+    if (process.env.NODE_ENV === 'production') {
+      console.error('Production auth: Missing token without fallback', {
+        baseUrl,
+        originalUrl,
+        path,
+        isMealPlanRequest
+      });
+    }
+
     return res.status(401).json({ 
       error: 'Access token required',
       message: 'Please log in to access this feature',
-      fallback: false
+      fallback: isMealPlanRequest && process.env.NODE_ENV === 'production'
     });
   }
 
