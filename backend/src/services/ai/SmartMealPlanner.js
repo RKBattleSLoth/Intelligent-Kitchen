@@ -394,7 +394,12 @@ REQUIREMENTS:
       // Breakfast
       {
         name: "Fluffy Pancakes with Maple Syrup",
-        description: "Light and fluffy pancakes served with butter and pure maple syrup, with a side of fresh berries. Mix dry ingredients separately from wet ingredients, then combine until just mixed. Cook on a preheated griddle at 375°F for 2-3 minutes per side until golden brown and bubbles form on the surface.",
+        description: "Light and fluffy pancakes served with butter and pure maple syrup, with a side of fresh berries.",
+        instructions: `Step 1: In a large bowl, whisk together ${Math.ceil(2 * scaleFactor)} cups all-purpose flour, ${Math.ceil(2 * scaleFactor)} tbsp sugar, ${Math.ceil(2 * scaleFactor)} tsp baking powder, and ${Math.ceil(1 * scaleFactor)} tsp salt until well combined.
+Step 2: In a separate bowl, beat ${Math.ceil(2 * scaleFactor)} eggs, then stir in ${Math.ceil(1.5 * scaleFactor)} cups milk, ${Math.ceil(4 * scaleFactor)} tbsp melted butter, and ${Math.ceil(1 * scaleFactor)} tsp vanilla extract until just combined.
+Step 3: Heat a griddle or large skillet over medium heat (375°F). Lightly grease with butter.
+Step 4: Pour ${Math.ceil(0.5 * scaleFactor)} cup batter for each pancake onto the griddle. Cook until bubbles form on surface and edges look set, about 2-3 minutes.
+Step 5: Flip pancakes and cook until golden brown on the other side, about 1-2 minutes more. Serve hot with maple syrup and fresh berries.`,
         ingredients: [
           `${Math.ceil(2 * scaleFactor)} cups all-purpose flour`,
           `${Math.ceil(2 * scaleFactor)} tbsp sugar`,
@@ -413,7 +418,12 @@ REQUIREMENTS:
       // Lunch
       {
         name: "Grilled Chicken Caesar Salad",
-        description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and homemade caesar dressing. Season chicken with salt and pepper, grill for 6-7 minutes per side at medium-high heat until internal temperature reaches 165°F. Let rest for 5 minutes before slicing. Toss lettuce with dressing and top with warm chicken.",
+        description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and homemade caesar dressing.",
+        instructions: `Step 1: Pat ${Math.ceil(2 * scaleFactor)} boneless chicken breasts dry and season with salt and black pepper.
+Step 2: Heat grill or large skillet over medium-high heat. Cook chicken for ${Math.ceil(6 * scaleFactor)}-${Math.ceil(7 * scaleFactor)} minutes per side until internal temperature reaches 165°F.
+Step 3: Let chicken rest for ${Math.ceil(5 * scaleFactor)} minutes, then slice into ${Math.ceil(0.5 * scaleFactor)}-inch strips.
+Step 4: Wash and chop ${Math.ceil(2 * scaleFactor)} heads romaine lettuce into bite-sized pieces.
+Step 5: In a large bowl, toss lettuce with ${Math.ceil(0.5 * scaleFactor)} cup caesar dressing, add chicken, ${Math.ceil(1 * scaleFactor)} cup parmesan, and ${Math.ceil(2 * scaleFactor)} cups croutons. Toss well and serve immediately.`,
         ingredients: [
           `${Math.ceil(2 * scaleFactor)} boneless chicken breasts`,
           `${Math.ceil(2 * scaleFactor)} heads romaine lettuce`,
@@ -431,7 +441,12 @@ REQUIREMENTS:
       // Dinner
       {
         name: "Herb-Crusted Salmon with Roasted Vegetables",
-        description: "Pan-seared salmon with a crispy herb crust, served with roasted seasonal vegetables. Preheat oven to 400°F. Mix breadcrumbs with herbs and garlic. Press onto salmon fillets. Pan-sear for 2 minutes per side, then finish in oven for 8-10 minutes. Roast vegetables at 400°F for 20-25 minutes until tender and lightly caramelized.",
+        description: "Pan-seared salmon with a crispy herb crust, served with roasted seasonal vegetables.",
+        instructions: `Step 1: Preheat oven to 400°F and line a baking sheet with foil.
+Step 2: In a small bowl, combine ${Math.ceil(1 * scaleFactor)} cup panko breadcrumbs, ${Math.ceil(2 * scaleFactor)} tbsp fresh parsley, ${Math.ceil(1 * scaleFactor)} tbsp fresh dill, and ${Math.ceil(2 * scaleFactor)} minced garlic.
+Step 3: Pat ${Math.ceil(4 * scaleFactor)} salmon fillets dry and brush with ${Math.ceil(2 * scaleFactor)} tbsp olive oil. Press herb mixture onto top of each fillet.
+Step 4: Heat a large oven-safe skillet over high heat for 2 minutes, then add salmon skin-side down. Sear for ${Math.ceil(2 * scaleFactor)} minutes without moving.
+Step 5: Transfer skillet to oven and bake for ${Math.ceil(8 * scaleFactor)}-${Math.ceil(10 * scaleFactor)} minutes until salmon is opaque and flakes easily.`,
         ingredients: [
           `${Math.ceil(4 * scaleFactor)} salmon fillets (6 oz each)`,
           `${Math.ceil(1 * scaleFactor)} cup panko breadcrumbs`,
