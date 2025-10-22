@@ -24,8 +24,13 @@ const authenticateToken = async (req, res, next) => {
 
   // Production mode: handle missing token gracefully for certain endpoints
   if (!token) {
+    const isMealPlanRequest =
+      (req.baseUrl && req.baseUrl.includes('/meal-plans')) ||
+      (req.originalUrl && req.originalUrl.includes('/meal-plans')) ||
+      (req.path && req.path.includes('/meal-plans'));
+
     // For Smart Meal Planning, provide a default user in production when token is missing
-    if (req.path.includes('/meal-plans') && process.env.NODE_ENV === 'production') {
+    if (isMealPlanRequest && process.env.NODE_ENV === 'production') {
       try {
         const result = await query(
           'SELECT id, email, first_name, last_name, dietary_preference, health_goal FROM users LIMIT 1'
