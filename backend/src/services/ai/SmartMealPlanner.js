@@ -204,20 +204,39 @@ REQUIREMENTS:
 - Steps should be actionable and easy to follow
 - Include preparation steps, cooking steps, and finishing steps`;
 
+    prompt += `
+
+OUTPUT RULES:
+- Respond with VALID JSON ONLY (no markdown, no commentary outside the JSON object)
+- Do not include trailing notes, explanations, or additional text after the JSON
+- Ensure the JSON parses without needing correction`;
+
     return prompt;
   }
 
   parseMealPlanResponse(response, dayCount, mealTypes) {
     try {
-      // Extract content from the response
-      const content = response.content || response;
-      
+      // Extract content from the response (handle OpenRouter array structure)
+      let content = '';
+      if (Array.isArray(response?.content)) {
+        content = response.content
+          .map(part => (typeof part?.text === 'string') ? part.text : '')
+          .join('')
+          .trim();
+      } else if (typeof response?.content === 'string') {
+        content = response.content.trim();
+      } else if (typeof response === 'string') {
+        content = response.trim();
+      } else {
+        content = JSON.stringify(response ?? '');
+      }
+
       // Clean up common JSON issues
       let cleanedContent = content
         // Remove any content before the JSON
         .replace(/^[^{]*\{/, '{')
         // Remove any content after the JSON
-        .replace(/\}[^}]*$/, '}')
+        .replace(/\}\s*[^\}\]]*$/, '}')
         // Fix common escaping issues in instructions
         .replace(/\\n/g, '\\\\n')
         .replace(/\\r/g, '\\\\r')
@@ -263,6 +282,19 @@ REQUIREMENTS:
         throw new Error('Invalid meal plan structure');
       }
 
+      // Normalize instructions to ensure multi-line, step-by-step formatting
+      mealPlan.meals = mealPlan.meals.map((meal) => {
+        const formattedInstructions = this.extractInstructions(
+          { instructions: meal.instructions },
+          meal.description || meal.name || ''
+        );
+
+        return {
+          ...meal,
+          instructions: formattedInstructions
+        };
+      });
+
       // Log meal count for debugging
       console.log(`Parsed meal plan with ${mealPlan.meals.length} meals for meal types: ${mealTypes.join(', ')}`);
       
@@ -276,7 +308,10 @@ REQUIREMENTS:
       return mealPlan;
     } catch (error) {
       console.error('Error parsing meal plan response:', error);
-      console.error('Response content sample:', (response.content || response).substring(0, 500) + '...');
+      const rawContent = Array.isArray(response?.content)
+        ? response.content.map(part => part?.text || '').join('')
+        : (response?.content || response || '').toString();
+      console.error('Response content sample:', rawContent.substring(0, 500) + '...');
       
       // Return a fallback structure for JSON parsing errors
       // The actual fallback will be used in the catch block of generateMealPlan
@@ -304,6 +339,32 @@ REQUIREMENTS:
 
     // High-quality fallback recipes with detailed ingredients and instructions
     const fallbackRecipes = this.getQualityFallbackRecipes(preferences, peopleCount);
+    const fallbackPools = fallbackRecipes.reduce((acc, recipe) => {
+      const type = recipe.mealType || 'any';
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(recipe);
+      return acc;
+    }, {});
+    const fallbackCounters = {};
+
+    const getNextFallbackRecipe = (mealType) => {
+      const lowerType = mealType?.toLowerCase?.() || 'any';
+      const pool = (fallbackPools[lowerType] && fallbackPools[lowerType].length > 0)
+        ? fallbackPools[lowerType]
+        : fallbackPools['any'] || fallbackRecipes;
+
+      if (!pool || pool.length === 0) {
+        return null;
+      }
+
+      const counter = fallbackCounters[lowerType] || 0;
+      fallbackCounters[lowerType] = (counter + 1) % pool.length;
+
+      const selected = pool[counter % pool.length];
+      return selected ? { ...selected } : null;
+    };
 
     for (const day of days) {
       const isoDate = day.toISOString().split('T')[0];
@@ -324,14 +385,26 @@ REQUIREMENTS:
             recipe = recipes[recipeIndex % userRecipeCount];
           } else {
             // Use fallback recipe for remaining meals
-            const mealTypeIndex = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'].indexOf(mealType);
-            recipe = fallbackRecipes[mealTypeIndex] || fallbackRecipes[0];
+            recipe = getNextFallbackRecipe(mealType);
           }
           recipeIndex++;
         } else {
           // No user recipes, use our quality fallback recipes
-          const mealTypeIndex = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'].indexOf(mealType);
-          recipe = fallbackRecipes[mealTypeIndex] || fallbackRecipes[0]; // fallback to first recipe
+          recipe = getNextFallbackRecipe(mealType);
+        }
+
+        if (!recipe) {
+          // Absolute fallback if something went wrong
+          recipe = {
+            name: `${mealType} Chef's Selection`,
+            description: `Chef's choice for ${mealType}`,
+            ingredients: [],
+            cook_time: 30,
+            difficulty: 'easy',
+            instructions: `Step 1: Gather ingredients for ${mealType}.
+Step 2: Prepare according to standard techniques.
+Step 3: Plate and serve.`
+          };
         }
 
         let ingredientsList;
@@ -363,11 +436,22 @@ REQUIREMENTS:
           description = recipe.description;
         }
 
+        const instructions = this.extractInstructions(recipe, description);
+
+        if (!instructions && process.env.NODE_ENV === 'production') {
+          console.warn('Fallback instructions missing', {
+            recipeName: recipe?.name,
+            mealType,
+            hasRecipeInstructions: Boolean(recipe?.instructions)
+          });
+        }
+
         fallbackMeals.push({
           date: isoDate,
           mealType,
           name: recipe.name,
           description: description,
+          instructions,
           ingredients: ingredientsList,
           cookTime: recipe.cook_time || recipe.cookTime || 30,
           difficulty: recipe.difficulty || 'easy',
@@ -391,107 +475,222 @@ REQUIREMENTS:
     const scaleFactor = peopleCount / 4; // Base recipes are for 4 people
     
     return [
-      // Breakfast
+      // Breakfast options
       {
-        name: "Fluffy Pancakes with Maple Syrup",
-        description: "Light and fluffy pancakes served with butter and pure maple syrup, with a side of fresh berries.",
-        instructions: `Step 1: In a large bowl, whisk together ${Math.ceil(2 * scaleFactor)} cups all-purpose flour, ${Math.ceil(2 * scaleFactor)} tbsp sugar, ${Math.ceil(2 * scaleFactor)} tsp baking powder, and ${Math.ceil(1 * scaleFactor)} tsp salt until well combined.
-Step 2: In a separate bowl, beat ${Math.ceil(2 * scaleFactor)} eggs, then stir in ${Math.ceil(1.5 * scaleFactor)} cups milk, ${Math.ceil(4 * scaleFactor)} tbsp melted butter, and ${Math.ceil(1 * scaleFactor)} tsp vanilla extract until just combined.
-Step 3: Heat a griddle or large skillet over medium heat (375°F). Lightly grease with butter.
-Step 4: Pour ${Math.ceil(0.5 * scaleFactor)} cup batter for each pancake onto the griddle. Cook until bubbles form on surface and edges look set, about 2-3 minutes.
-Step 5: Flip pancakes and cook until golden brown on the other side, about 1-2 minutes more. Serve hot with maple syrup and fresh berries.`,
+        mealType: 'breakfast',
+        name: 'Fluffy Pancakes with Maple Syrup',
+        description: 'Light and fluffy pancakes served with fresh berries and maple syrup.',
+        instructions: `Step 1: Whisk together ${Math.ceil(2 * scaleFactor)} cups flour, ${Math.ceil(2 * scaleFactor)} tbsp sugar, ${Math.ceil(2 * scaleFactor)} tsp baking powder, and ${Math.ceil(1 * scaleFactor)} tsp salt.
+Step 2: Beat ${Math.ceil(2 * scaleFactor)} eggs with ${Math.ceil(1.5 * scaleFactor)} cups milk and ${Math.ceil(4 * scaleFactor)} tbsp melted butter.
+Step 3: Fold wet ingredients into dry until just combined; do not overmix.
+Step 4: Heat greased griddle over medium heat and pour ${Math.ceil(0.5 * scaleFactor)} cup batter per pancake.
+Step 5: Cook 2-3 minutes per side until golden, then serve with berries and syrup.`,
         ingredients: [
           `${Math.ceil(2 * scaleFactor)} cups all-purpose flour`,
           `${Math.ceil(2 * scaleFactor)} tbsp sugar`,
           `${Math.ceil(2 * scaleFactor)} tsp baking powder`,
           `${Math.ceil(1 * scaleFactor)} tsp salt`,
-          `${Math.ceil(2 * scaleFactor)} eggs`,
+          `${Math.ceil(2 * scaleFactor)} large eggs`,
           `${Math.ceil(1.5 * scaleFactor)} cups milk`,
           `${Math.ceil(4 * scaleFactor)} tbsp melted butter`,
           `${Math.ceil(1 * scaleFactor)} tsp vanilla extract`,
-          `${Math.ceil(1 * scaleFactor)} cups mixed fresh berries`,
+          `${Math.ceil(1 * scaleFactor)} cups mixed berries`,
           `${Math.ceil(0.5 * scaleFactor)} cup maple syrup`
         ],
         cookTime: 20,
-        difficulty: "easy"
+        difficulty: 'easy'
       },
-      // Lunch
       {
-        name: "Grilled Chicken Caesar Salad",
-        description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and homemade caesar dressing.",
-        instructions: `Step 1: Pat ${Math.ceil(2 * scaleFactor)} boneless chicken breasts dry and season with salt and black pepper.
-Step 2: Heat grill or large skillet over medium-high heat. Cook chicken for ${Math.ceil(6 * scaleFactor)}-${Math.ceil(7 * scaleFactor)} minutes per side until internal temperature reaches 165°F.
-Step 3: Let chicken rest for ${Math.ceil(5 * scaleFactor)} minutes, then slice into ${Math.ceil(0.5 * scaleFactor)}-inch strips.
-Step 4: Wash and chop ${Math.ceil(2 * scaleFactor)} heads romaine lettuce into bite-sized pieces.
-Step 5: In a large bowl, toss lettuce with ${Math.ceil(0.5 * scaleFactor)} cup caesar dressing, add chicken, ${Math.ceil(1 * scaleFactor)} cup parmesan, and ${Math.ceil(2 * scaleFactor)} cups croutons. Toss well and serve immediately.`,
+        mealType: 'breakfast',
+        name: 'Veggie Breakfast Burritos',
+        description: 'Soft tortillas filled with scrambled eggs, roasted vegetables, and cheese.',
+        instructions: `Step 1: Sauté ${Math.ceil(2 * scaleFactor)} cups diced vegetables in ${Math.ceil(2 * scaleFactor)} tbsp oil for 6 minutes.
+Step 2: Scramble ${Math.ceil(8 * scaleFactor)} eggs with salt and pepper until set.
+Step 3: Warm ${Math.ceil(6 * scaleFactor)} large tortillas.
+Step 4: Layer eggs, vegetables, ${Math.ceil(1.5 * scaleFactor)} cups cheese, and ${Math.ceil(1 * scaleFactor)} cups beans in tortillas.
+Step 5: Roll burritos tightly and serve with salsa.`,
         ingredients: [
-          `${Math.ceil(2 * scaleFactor)} boneless chicken breasts`,
-          `${Math.ceil(2 * scaleFactor)} heads romaine lettuce`,
-          `${Math.ceil(1 * scaleFactor)} cup parmesan cheese, shredded`,
-          `${Math.ceil(2 * scaleFactor)} cups croutons`,
-          `${Math.ceil(0.5 * scaleFactor)} cup caesar dressing`,
-          `${Math.ceil(2 * scaleFactor)} cloves garlic`,
+          `${Math.ceil(6 * scaleFactor)} large tortillas`,
+          `${Math.ceil(8 * scaleFactor)} eggs`,
+          `${Math.ceil(2 * scaleFactor)} cups mixed vegetables`,
+          `${Math.ceil(1.5 * scaleFactor)} cups shredded cheese`,
+          `${Math.ceil(1 * scaleFactor)} cups black beans`,
           `${Math.ceil(2 * scaleFactor)} tbsp olive oil`,
-          `${Math.ceil(1 * scaleFactor)} lemon`,
-          `${Math.ceil(1 * scaleFactor)} tsp black pepper`
+          `${Math.ceil(0.5 * scaleFactor)} cup salsa`
         ],
         cookTime: 25,
-        difficulty: "medium"
+        difficulty: 'easy'
       },
-      // Dinner
+      // Lunch options
       {
-        name: "Herb-Crusted Salmon with Roasted Vegetables",
-        description: "Pan-seared salmon with a crispy herb crust, served with roasted seasonal vegetables.",
-        instructions: `Step 1: Preheat oven to 400°F and line a baking sheet with foil.
-Step 2: In a small bowl, combine ${Math.ceil(1 * scaleFactor)} cup panko breadcrumbs, ${Math.ceil(2 * scaleFactor)} tbsp fresh parsley, ${Math.ceil(1 * scaleFactor)} tbsp fresh dill, and ${Math.ceil(2 * scaleFactor)} minced garlic.
-Step 3: Pat ${Math.ceil(4 * scaleFactor)} salmon fillets dry and brush with ${Math.ceil(2 * scaleFactor)} tbsp olive oil. Press herb mixture onto top of each fillet.
-Step 4: Heat a large oven-safe skillet over high heat for 2 minutes, then add salmon skin-side down. Sear for ${Math.ceil(2 * scaleFactor)} minutes without moving.
-Step 5: Transfer skillet to oven and bake for ${Math.ceil(8 * scaleFactor)}-${Math.ceil(10 * scaleFactor)} minutes until salmon is opaque and flakes easily.`,
+        mealType: 'lunch',
+        name: 'Grilled Chicken Caesar Salad',
+        description: 'Crisp romaine lettuce topped with grilled chicken, parmesan, and croutons.',
+        instructions: `Step 1: Season ${Math.ceil(2 * scaleFactor)} chicken breasts with oil, salt, and pepper.
+Step 2: Grill chicken 6-7 minutes per side at 400°F; rest and slice thinly.
+Step 3: Chop ${Math.ceil(2 * scaleFactor)} heads romaine and place in bowl.
+Step 4: Toss lettuce with ${Math.ceil(0.5 * scaleFactor)} cup dressing, ${Math.ceil(1 * scaleFactor)} cup parmesan, and croutons.
+Step 5: Top with sliced chicken and fresh lemon juice.`,
         ingredients: [
-          `${Math.ceil(4 * scaleFactor)} salmon fillets (6 oz each)`,
-          `${Math.ceil(1 * scaleFactor)} cup panko breadcrumbs`,
-          `${Math.ceil(2 * scaleFactor)} tbsp fresh parsley, chopped`,
-          `${Math.ceil(1 * scaleFactor)} tbsp fresh dill, chopped`,
-          `${Math.ceil(2 * scaleFactor)} cloves garlic, minced`,
+          `${Math.ceil(2 * scaleFactor)} chicken breasts`,
+          `${Math.ceil(2 * scaleFactor)} heads romaine`,
+          `${Math.ceil(1 * scaleFactor)} cup parmesan`,
+          `${Math.ceil(2 * scaleFactor)} cups croutons`,
+          `${Math.ceil(0.5 * scaleFactor)} cup Caesar dressing`,
+          `${Math.ceil(2 * scaleFactor)} tbsp olive oil`,
+          `${Math.ceil(1 * scaleFactor)} lemon`
+        ],
+        cookTime: 25,
+        difficulty: 'medium'
+      },
+      {
+        mealType: 'lunch',
+        name: 'Roasted Vegetable Quinoa Bowls',
+        description: 'Protein-packed quinoa bowls with roasted seasonal vegetables and tahini sauce.',
+        instructions: `Step 1: Roast ${Math.ceil(4 * scaleFactor)} cups vegetables at 400°F for 20 minutes.
+Step 2: Cook ${Math.ceil(2 * scaleFactor)} cups quinoa in broth until fluffy.
+Step 3: Whisk tahini, lemon juice, garlic, and water into a smooth dressing.
+Step 4: Divide quinoa into bowls and top with vegetables and ${Math.ceil(1 * scaleFactor)} cups chickpeas.
+Step 5: Drizzle with dressing and garnish with herbs.`,
+        ingredients: [
+          `${Math.ceil(2 * scaleFactor)} cups quinoa`,
+          `${Math.ceil(4 * scaleFactor)} cups mixed vegetables`,
+          `${Math.ceil(1 * scaleFactor)} cups chickpeas`,
+          `${Math.ceil(0.5 * scaleFactor)} cup tahini`,
+          `${Math.ceil(0.25 * scaleFactor)} cup lemon juice`,
+          `${Math.ceil(2 * scaleFactor)} cloves garlic`,
+          `${Math.ceil(0.5 * scaleFactor)} cup fresh herbs`
+        ],
+        cookTime: 30,
+        difficulty: 'easy'
+      },
+      // Dinner options
+      {
+        mealType: 'dinner',
+        name: 'Herb-Crusted Salmon with Roasted Vegetables',
+        description: 'Oven-baked salmon with herb crust and roasted seasonal vegetables.',
+        instructions: `Step 1: Preheat oven to 400°F and line a baking sheet.
+Step 2: Toss ${Math.ceil(3 * scaleFactor)} cups vegetables with oil, salt, and pepper.
+Step 3: Mix breadcrumbs with herbs and press onto ${Math.ceil(4 * scaleFactor)} salmon fillets.
+Step 4: Roast vegetables 10 minutes, then add salmon; bake 12-15 minutes more.
+Step 5: Finish with lemon wedges and serve hot.`,
+        ingredients: [
+          `${Math.ceil(4 * scaleFactor)} salmon fillets`,
+          `${Math.ceil(1 * scaleFactor)} cup breadcrumbs`,
+          `${Math.ceil(2 * scaleFactor)} tbsp parsley`,
+          `${Math.ceil(1 * scaleFactor)} tbsp dill`,
+          `${Math.ceil(2 * scaleFactor)} cloves garlic`,
           `${Math.ceil(3 * scaleFactor)} tbsp olive oil`,
-          `${Math.ceil(2 * scaleFactor)} cups mixed vegetables`,
-          `${Math.ceil(1 * scaleFactor)} lemon, cut into wedges`,
-          `${Math.ceil(1 * scaleFactor)} tsp salt`,
-          `${Math.ceil(0.5 * scaleFactor)} tsp black pepper`
+          `${Math.ceil(3 * scaleFactor)} cups vegetables`,
+          `${Math.ceil(1 * scaleFactor)} lemon`
         ],
         cookTime: 35,
-        difficulty: "medium"
+        difficulty: 'medium'
       },
-      // Snack
       {
-        name: "Greek Yogurt Parfait",
-        description: "Layered Greek yogurt with granola, honey, and fresh fruit for a healthy snack. Layer ingredients in a clear glass: start with yogurt, then granola, then berries, repeating layers. Drizzle with honey and top with a sprinkle of nuts for crunch.",
+        mealType: 'dinner',
+        name: 'Tuscan Chicken Pasta',
+        description: 'Creamy sun-dried tomato sauce with seared chicken and spinach over pasta.',
+        instructions: `Step 1: Cook ${Math.ceil(1.5 * scaleFactor)} lbs pasta until al dente; reserve pasta water.
+Step 2: Sear seasoned chicken in ${Math.ceil(2 * scaleFactor)} tbsp oil until golden; slice.
+Step 3: Sauté garlic and sun-dried tomatoes, then add cream and broth.
+Step 4: Simmer sauce 5 minutes, add spinach to wilt.
+Step 5: Toss pasta with sauce and chicken, using reserved water to adjust consistency.`,
+        ingredients: [
+          `${Math.ceil(1.5 * scaleFactor)} lbs pasta`,
+          `${Math.ceil(2 * scaleFactor)} chicken breasts`,
+          `${Math.ceil(0.5 * scaleFactor)} cup sun-dried tomatoes`,
+          `${Math.ceil(2 * scaleFactor)} cups spinach`,
+          `${Math.ceil(2 * scaleFactor)} cloves garlic`,
+          `${Math.ceil(1 * scaleFactor)} cup heavy cream`,
+          `${Math.ceil(1 * scaleFactor)} cup chicken broth`,
+          `${Math.ceil(0.5 * scaleFactor)} cup parmesan`
+        ],
+        cookTime: 30,
+        difficulty: 'medium'
+      },
+      // Snack options
+      {
+        mealType: 'snack',
+        name: 'Greek Yogurt Parfaits',
+        description: 'Layered parfaits with yogurt, granola, seasonal fruit, and honey.',
+        instructions: `Step 1: Spoon ${Math.ceil(2 * scaleFactor)} cups yogurt into glasses as the first layer.
+Step 2: Add ${Math.ceil(1 * scaleFactor)} cup granola on top.
+Step 3: Layer ${Math.ceil(1 * scaleFactor)} cup fresh fruit over granola.
+Step 4: Repeat layers until glasses are filled.
+Step 5: Drizzle with honey and sprinkle nuts before serving.`,
         ingredients: [
           `${Math.ceil(2 * scaleFactor)} cups Greek yogurt`,
           `${Math.ceil(1 * scaleFactor)} cup granola`,
-          `${Math.ceil(1 * scaleFactor)} cup mixed berries`,
-          `${Math.ceil(2 * scaleFactor)} tbsp honey`,
-          `${Math.ceil(0.5 * scaleFactor)} cup chopped nuts`
+          `${Math.ceil(1 * scaleFactor)} cup seasonal fruit`,
+          `${Math.ceil(0.25 * scaleFactor)} cup chopped nuts`,
+          `${Math.ceil(0.25 * scaleFactor)} cup honey`
         ],
         cookTime: 5,
-        difficulty: "easy"
+        difficulty: 'easy'
       },
-      // Dessert
       {
-        name: "Chocolate Avocado Mousse",
-        description: "Rich and creamy chocolate mousse made with avocado for a healthy twist. Blend avocados until completely smooth, then add cocoa powder, maple syrup, and vanilla extract. Blend until creamy. Fold in whipped cream for extra lightness. Chill for 30 minutes before serving. Garnish with chocolate shavings.",
+        mealType: 'snack',
+        name: 'Mediterranean Snack Platter',
+        description: 'Hummus with fresh vegetables, olives, and warm pita wedges.',
+        instructions: `Step 1: Warm ${Math.ceil(4 * scaleFactor)} pita rounds in a 350°F oven for 5 minutes.
+Step 2: Arrange sliced vegetables, olives, and feta on a platter.
+Step 3: Spoon hummus into a bowl and drizzle with olive oil.
+Step 4: Sprinkle with paprika and chopped parsley.
+Step 5: Serve immediately with warm pita wedges.`,
+        ingredients: [
+          `${Math.ceil(4 * scaleFactor)} pita rounds`,
+          `${Math.ceil(1 * scaleFactor)} cup hummus`,
+          `${Math.ceil(2 * scaleFactor)} cups assorted vegetables`,
+          `${Math.ceil(0.5 * scaleFactor)} cup olives`,
+          `${Math.ceil(0.25 * scaleFactor)} cup feta`,
+          `${Math.ceil(2 * scaleFactor)} tbsp olive oil`
+        ],
+        cookTime: 10,
+        difficulty: 'easy'
+      },
+      // Dessert options
+      {
+        mealType: 'dessert',
+        name: 'Chocolate Avocado Mousse',
+        description: 'Silky chocolate mousse made with ripe avocado and cocoa.',
+        instructions: `Step 1: Blend ${Math.ceil(2 * scaleFactor)} ripe avocados until smooth.
+Step 2: Add cocoa powder, maple syrup, vanilla, and almond milk; blend creamy.
+Step 3: Fold in whipped cream for a lighter texture.
+Step 4: Chill mousse for at least 30 minutes.
+Step 5: Garnish with chocolate shavings before serving.`,
         ingredients: [
           `${Math.ceil(2 * scaleFactor)} ripe avocados`,
           `${Math.ceil(0.5 * scaleFactor)} cup cocoa powder`,
           `${Math.ceil(0.5 * scaleFactor)} cup maple syrup`,
           `${Math.ceil(0.25 * scaleFactor)} cup almond milk`,
-          `${Math.ceil(1 * scaleFactor)} tsp vanilla extract`,
-          `${Math.ceil(0.5 * scaleFactor)} tsp espresso powder`,
+          `${Math.ceil(1 * scaleFactor)} tsp vanilla`,
           `${Math.ceil(0.25 * scaleFactor)} cup whipped cream`,
-          `${Math.ceil(2 * scaleFactor)} tbsp chocolate shavings`
+          `${Math.ceil(0.25 * scaleFactor)} cup chocolate shavings`
         ],
         cookTime: 10,
-        difficulty: "easy"
+        difficulty: 'easy'
+      },
+      {
+        mealType: 'dessert',
+        name: 'Baked Cinnamon Apples',
+        description: 'Warm cinnamon-spiced apples topped with crunchy oat crumble.',
+        instructions: `Step 1: Preheat oven to 375°F and grease baking dish.
+Step 2: Toss sliced apples with lemon juice, sugar, and cinnamon.
+Step 3: Combine oats, flour, butter, and brown sugar into a crumble.
+Step 4: Layer apples in dish and sprinkle crumble evenly on top.
+Step 5: Bake 30 minutes until apples are tender and topping is golden.`,
+        ingredients: [
+          `${Math.ceil(6 * scaleFactor)} apples`,
+          `${Math.ceil(0.5 * scaleFactor)} cup brown sugar`,
+          `${Math.ceil(1 * scaleFactor)} tsp cinnamon`,
+          `${Math.ceil(1 * scaleFactor)} tbsp lemon juice`,
+          `${Math.ceil(1 * scaleFactor)} cup rolled oats`,
+          `${Math.ceil(0.5 * scaleFactor)} cup flour`,
+          `${Math.ceil(0.5 * scaleFactor)} cup butter`
+        ],
+        cookTime: 35,
+        difficulty: 'easy'
       }
     ];
   }
@@ -569,6 +768,119 @@ Step 5: Transfer skillet to oven and bake for ${Math.ceil(8 * scaleFactor)}-${Ma
     }
 
     return result.rows;
+  }
+
+  extractInstructions(recipe = {}, fallbackDescription = '') {
+    const instructionsSource = recipe.instructions;
+    const buildSteps = (stepsArray) => {
+      if (!Array.isArray(stepsArray)) return [];
+      return stepsArray.map((step, index) => {
+        if (!step) return null;
+        if (typeof step === 'string') {
+          const trimmed = step.trim();
+          return trimmed ? `Step ${index + 1}: ${trimmed}` : null;
+        }
+        if (typeof step === 'object') {
+          const text = step.text || step.description || step.instruction || step.step;
+          if (text && typeof text === 'string' && text.trim()) {
+            return `Step ${index + 1}: ${text.trim()}`;
+          }
+        }
+        return null;
+      }).filter(Boolean);
+    };
+
+    let formatted = null;
+
+    if (Array.isArray(instructionsSource)) {
+      const steps = buildSteps(instructionsSource);
+      if (steps.length > 0) {
+        formatted = steps.join('\n');
+      }
+    }
+
+    if (!formatted && instructionsSource && typeof instructionsSource === 'object' && !Array.isArray(instructionsSource)) {
+      const candidateArray = Array.isArray(instructionsSource.steps)
+        ? instructionsSource.steps
+        : Array.isArray(instructionsSource.instructions)
+          ? instructionsSource.instructions
+          : null;
+
+      if (candidateArray) {
+        const steps = buildSteps(candidateArray);
+        if (steps.length > 0) {
+          formatted = steps.join('\n');
+        }
+      } else if (typeof instructionsSource.text === 'string') {
+        formatted = this.normalizeInstructionText(instructionsSource.text);
+      }
+    }
+
+    if (!formatted && typeof instructionsSource === 'string') {
+      const trimmed = instructionsSource.trim();
+      if (trimmed) {
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            const steps = buildSteps(Array.isArray(parsed) ? parsed : parsed?.steps || parsed?.instructions || []);
+            if (steps.length > 0) {
+              formatted = steps.join('\n');
+            }
+          } catch (err) {
+            // Ignore JSON parse errors and fall back to text normalization
+          }
+        }
+
+        if (!formatted) {
+          formatted = this.normalizeInstructionText(trimmed);
+        }
+      }
+    }
+
+    if (!formatted && typeof fallbackDescription === 'string' && fallbackDescription.trim()) {
+      formatted = this.generateInstructionsFromDescription(fallbackDescription.trim());
+    }
+
+    if (!formatted) {
+      formatted = 'Step 1: Gather all ingredients and prepare your workspace.\nStep 2: Follow the recipe\'s standard preparation and cooking steps.\nStep 3: Plate the meal and serve immediately while hot.';
+    }
+
+    return formatted;
+  }
+
+  normalizeInstructionText(text = '') {
+    const normalized = text.replace(/\r\n/g, '\n').trim();
+    if (!normalized) return '';
+
+    if (/Step\s*\d+/i.test(normalized)) {
+      return normalized
+        .replace(/(Step\s*\d+\s*:)/gi, '\n$1')
+        .replace(/^\n+/, '')
+        .replace(/\n{2,}/g, '\n')
+        .trim();
+    }
+
+    return this.generateInstructionsFromDescription(normalized);
+  }
+
+  generateInstructionsFromDescription(description = '') {
+    const cleaned = description.replace(/\s+/g, ' ').trim();
+    if (!cleaned) {
+      return '';
+    }
+
+    const sentences = cleaned
+      .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+      .map(sentence => sentence.replace(/[.!?]+$/, '').trim())
+      .filter(Boolean);
+
+    if (sentences.length === 0) {
+      return '';
+    }
+
+    return sentences
+      .map((sentence, index) => `Step ${index + 1}: ${sentence}`)
+      .join('\n');
   }
 
   async getMealAlternatives(options) {

@@ -269,11 +269,15 @@ class MealPlanService {
     for (const meal of mealPlan.meals) {
       if (meal.date && meal.mealType && meal.name) {
         const normalizedMealType = this.normalizeMealType(meal.mealType)
+        const instructionText = typeof meal.instructions === 'string' && meal.instructions.trim().length > 0
+          ? meal.instructions.trim()
+          : meal.description || meal.name
+
         const recipe: Recipe = {
           id: `ai-recipe-${meal.date}-${meal.mealType}`,
           name: meal.name,
           category: normalizedMealType as any,
-          instructions: meal.description || meal.name,
+          instructions: instructionText,
           ingredients: meal.ingredients || [],
           prepTime: meal.cookTime || 30,
           cookTime: meal.cookTime || 30
