@@ -413,12 +413,29 @@ router.post('/generate', authenticateToken, [
   body('peopleCount').optional().isInt({ min: 1, max: 20 }),
   handleValidationErrors
 ], async (req, res) => {
+  const startTime = Date.now();
+  let debugInfo = {
+    environment: process.env.NODE_ENV,
+    userId: null,
+    request_body: req.body,
+    openrouter_key_set: !!process.env.OPENROUTER_API_KEY,
+    database_url_set: !!process.env.DATABASE_URL
+  };
+
   try {
-    const userId = req.user.id;
+    debugInfo.userId = req.user.id;
+    console.log('🍳 [MEAL_PLAN_GENERATE] Starting meal plan generation:', {
+      userId: req.user.id,
+      environment: process.env.NODE_ENV,
+      requestSize: JSON.stringify(req.body).length,
+      timestamp: new Date().toISOString()
+    });
+
     const mealPlanner = new SmartMealPlanner();
 
+    console.log('🤖 [MEAL_PLAN_GENERATE] Calling SmartMealPlanner.generateMealPlan');
     const result = await mealPlanner.generateMealPlan({
-      userId,
+      userId: req.user.id,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       mealTypes: req.body.mealTypes || ['breakfast', 'lunch', 'dinner'],
@@ -428,12 +445,39 @@ router.post('/generate', authenticateToken, [
       peopleCount: req.body.peopleCount || 4
     });
 
+    debugInfo.result_success = result.success;
+    debugInfo.result_fallback = result.fallback;
+    debugInfo.meal_count = result.mealPlan?.meals?.length || 0;
+    debugInfo.duration = Date.now() - startTime;
+
+    console.log('✅ [MEAL_PLAN_GENERATE] Successfully generated meal plan:', {
+      success: result.success,
+      fallback: result.fallback,
+      mealCount: result.mealPlan?.meals?.length,
+      duration: debugInfo.duration,
+      timestamp: new Date().toISOString()
+    });
+
     res.json(result);
   } catch (error) {
-    console.error('Generate meal plan error:', error);
+    debugInfo.error = error.message;
+    debugInfo.error_stack = error.stack;
+    debugInfo.duration = Date.now() - startTime;
+
+    console.error('❌ [MEAL_PLAN_GENERATE] Generate meal plan error:', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      environment: process.env.NODE_ENV,
+      duration: debugInfo.duration,
+      debugInfo,
+      timestamp: new Date().toISOString()
+    });
+
     res.status(500).json({ 
       error: 'Failed to generate meal plan',
-      details: error.message 
+      details: error.message,
+      debugInfo
     });
   }
 });

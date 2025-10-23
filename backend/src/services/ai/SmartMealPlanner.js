@@ -18,10 +18,28 @@ class SmartMealPlanner {
       peopleCount = 4
     } = options;
 
+    console.log('🍳 [SMART_MEAL_PLANNER] Starting meal plan generation:', {
+      userId,
+      startDate,
+      endDate,
+      mealTypes,
+      recipeSource,
+      peopleCount,
+      environment: process.env.NODE_ENV,
+      timestamp: new Date().toISOString()
+    });
+
     // Calculate dayCount for both AI and fallback
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
     const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
+
+    console.log('📅 [SMART_MEAL_PLANNER] Date calculations:', {
+      startDateObj: startDateObj.toISOString(),
+      endDateObj: endDateObj.toISOString(),
+      dayCount,
+      totalMealsExpected: dayCount * mealTypes.length
+    });
 
     // Build the prompt for meal planning
     const prompt = this.buildMealPlanPrompt({
@@ -34,7 +52,15 @@ class SmartMealPlanner {
       peopleCount
     });
 
+    console.log('🤖 [SMART_MEAL_PLANNER] AI Service Check:', {
+      hasApiKey: !!process.env.OPENROUTER_API_KEY,
+      apiKeyLength: process.env.OPENROUTER_API_KEY?.length || 0,
+      model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3.5-sonnet',
+      promptLength: prompt.length
+    });
+
     try {
+      console.log('🔄 [SMART_MEAL_PLANNER] Attempting AI generation...');
       const response = await this.client.chat([
         {
           role: 'user',
@@ -46,18 +72,32 @@ class SmartMealPlanner {
         maxTokens: 4000
       });
 
+      console.log('✅ [SMART_MEAL_PLANNER] AI response received:', {
+        hasContent: !!response?.content,
+        contentLength: response?.content?.length || 0,
+        usage: response?.usage
+      });
+
       let mealPlanData;
       try {
         mealPlanData = this.parseMealPlanResponse(response, dayCount, mealTypes);
+        console.log('✅ [SMART_MEAL_PLANNER] Successfully parsed meal plan:', {
+          mealCount: mealPlanData?.meals?.length || 0,
+          expectedCount: dayCount * mealTypes.length
+        });
       } catch (parseError) {
-        console.error('JSON parsing error, using fallback:', parseError.message);
+        console.error('❌ [SMART_MEAL_PLANNER] JSON parsing error, using fallback:', {
+          error: parseError.message,
+          stack: parseError.stack,
+          responseSample: typeof response?.content === 'string' ? response.content.substring(0, 200) : 'N/A'
+        });
         // AI responded but JSON parsing failed - use fallback instead
         mealPlanData = null;
       }
       
       // If parsing failed or no meals, use fallback
       if (!mealPlanData || !mealPlanData.meals || mealPlanData.meals.length === 0) {
-        console.log('Using fallback due to AI response issues');
+        console.log('⚠️ [SMART_MEAL_PLANNER] Using fallback due to AI response issues');
         const fallback = await this.generateFallbackMealPlan({
           userId,
           startDate,
@@ -77,13 +117,21 @@ class SmartMealPlanner {
         };
       }
       
+      console.log('🎉 [SMART_MEAL_PLANNER] AI generation successful');
       return {
         success: true,
         mealPlan: mealPlanData,
         rawResponse: response
       };
     } catch (error) {
-      console.error('Error generating meal plan via AI:', error.message);
+      console.error('❌ [SMART_MEAL_PLANNER] Error generating meal plan via AI:', {
+        error: error.message,
+        stack: error.stack,
+        hasApiKey: !!process.env.OPENROUTER_API_KEY,
+        environment: process.env.NODE_ENV
+      });
+      
+      console.log('🔄 [SMART_MEAL_PLANNER] Generating fallback meal plan...');
       const fallback = await this.generateFallbackMealPlan({
         userId,
         startDate,
@@ -93,6 +141,11 @@ class SmartMealPlanner {
         recipeSource,
         peopleCount
       });
+      
+      console.log('✅ [SMART_MEAL_PLANNER] Fallback generation complete:', {
+        fallbackMealCount: fallback?.meals?.length || 0
+      });
+      
       return {
         success: true,
         mealPlan: fallback,

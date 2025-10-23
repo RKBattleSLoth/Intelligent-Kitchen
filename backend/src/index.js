@@ -91,12 +91,19 @@ app.get('/health', async (req, res) => {
       status: db.isHealthy() ? 'OK' : 'ERROR',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
+      environment: process.env.NODE_ENV,
       database: {
         healthy: db.isHealthy(),
         lastHealthCheck: db.getLastHealthCheck(),
         connected: db.pool.totalCount > 0,
         idleConnections: db.pool.idleCount,
-        totalConnections: db.pool.totalCount
+        totalConnections: db.pool.totalCount,
+        url: process.env.DATABASE_URL ? 'SET' : 'NOT_SET'
+      },
+      ai: {
+        openrouter_key: process.env.OPENROUTER_API_KEY ? 'SET' : 'NOT_SET',
+        key_length: process.env.OPENROUTER_API_KEY?.length || 0,
+        model: process.env.OPENROUTER_MODEL || 'NOT_SET'
       },
       uptime: process.uptime(),
       memory: {
@@ -113,6 +120,81 @@ app.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       error: 'Health check failed',
       details: error.message
+    });
+  }
+});
+
+// Railway debug endpoint for meal planning issues
+app.get('/debug/railway-meal-planning', async (req, res) => {
+  try {
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      platform: process.env.RAILWAY_ENVIRONMENT ? 'Railway' : 'Other',
+      
+      // Environment variables (sanitized)
+      environment_vars: {
+        DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT_SET',
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ? 
+          `${process.env.OPENROUTER_API_KEY.substring(0, 10)}...${process.env.OPENROUTER_API_KEY.slice(-4)}` : 
+          'NOT_SET',
+        JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT_SET',
+        NODE_ENV: process.env.NODE_ENV,
+        PORT: process.env.PORT
+      },
+      
+      // Database test
+      database_test: {
+        healthy: db.isHealthy(),
+        last_check: db.getLastHealthCheck(),
+        pool_info: {
+          total: db.pool.totalCount,
+          idle: db.pool.idleCount,
+          waiting: db.pool.waitingCount
+        }
+      },
+      
+      // Authentication test
+      auth_test: {
+        has_users: false,
+        user_count: 0
+      }
+    };
+
+    // Test database connection with a simple query
+    try {
+      const result = await db.query('SELECT COUNT(*) as user_count FROM users LIMIT 1');
+      debugInfo.auth_test.has_users = true;
+      debugInfo.auth_test.user_count = parseInt(result.rows[0].user_count);
+    } catch (dbError) {
+      debugInfo.database_test.error = dbError.message;
+    }
+
+    // Test AI service
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        const OpenRouterClient = require('./services/ai/OpenRouterClient');
+        const client = new OpenRouterClient();
+        debugInfo.ai_test = await client.testConnection();
+      } catch (aiError) {
+        debugInfo.ai_test = {
+          status: 'error',
+          error: aiError.message
+        };
+      }
+    } else {
+      debugInfo.ai_test = {
+        status: 'error',
+        error: 'OpenRouter API key not set'
+      };
+    }
+
+    res.json(debugInfo);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Debug endpoint failed',
+      details: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
