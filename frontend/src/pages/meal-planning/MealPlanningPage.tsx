@@ -3,6 +3,7 @@ import { MealSlot, PlannedMeal, MealPlanFilters, DEFAULT_MEAL_PLAN_FILTERS, MEAL
 import { Recipe } from '../../types/recipe'
 import { mealPlanService } from '../../services/mealPlanService'
 import { recipeService } from '../../services/recipeService'
+import { shoppingListService } from '../../services/shoppingListService'
 import { RecipeForm } from '../../components/recipes/RecipeForm'
 import { SmartMealPlannerModal } from '../../components/meal-planning/SmartMealPlannerModal'
 import { RecipeViewModal } from '../../components/meal-planning/RecipeViewModal'
@@ -233,6 +234,92 @@ export const MealPlanningPage: React.FC = () => {
   const [viewingRecipe, setViewingRecipe] = useState<{ recipe: Recipe; date: string; mealSlot: MealSlot } | null>(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearAction, setClearAction] = useState<string | null>(null)
+
+  const extractIngredientsForShopping = (recipe: any): Array<string | {
+    text?: string
+    quantity?: string | number | null
+    unit?: string | null
+    name?: string | null
+  }> => {
+    if (!recipe) return []
+
+    if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+      return recipe.ingredients
+    }
+
+    if (typeof recipe.instructions === 'string' && recipe.instructions.trim()) {
+      const parsed = recipeService.parseInstructions(recipe.instructions)
+      if (parsed.items.length > 0) {
+        return parsed.items.map(item => ({
+          text: item.text,
+          quantity: item.quantity ?? item.quantityValue ?? null,
+          unit: item.unit ?? null,
+          name: item.name ?? null
+        }))
+      }
+    }
+
+    return []
+  }
+
+  const addIngredientsGroupToShoppingList = async (ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }>, contextLabel: string) => {
+    if (!ingredients || ingredients.length === 0) {
+      alert(`No ingredients found ${contextLabel}.`)
+      return
+    }
+
+    try {
+      const addedItems = await shoppingListService.addIngredientsToList(ingredients)
+      if (!addedItems || addedItems.length === 0) {
+        alert(`No ingredients were added ${contextLabel}.`)
+        return
+      }
+
+      alert(`Added ${addedItems.length} item${addedItems.length === 1 ? '' : 's'} to your shopping list ${contextLabel}.`)
+    } catch (error) {
+      console.error('Error adding ingredients to shopping list:', error)
+      alert('Failed to add ingredients to shopping list. Please try again.')
+    }
+  }
+
+  const handleAddRecipeIngredientsToShoppingList = async (recipe: Recipe) => {
+    const ingredients = extractIngredientsForShopping(recipe as any)
+    await addIngredientsGroupToShoppingList(ingredients, `from "${recipe.name}"`)
+  }
+
+  const handleAddDayToShoppingList = async (date: string) => {
+    const mealsForDate = Object.values(plannedMeals).filter(meal => meal.date === date)
+    if (mealsForDate.length === 0) {
+      alert('No meals planned for this day.')
+      return
+    }
+
+    const ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> = []
+    mealsForDate.forEach(meal => {
+      ingredients.push(...extractIngredientsForShopping(meal.recipe as any))
+    })
+
+    const friendlyDate = new Date(`${date}T00:00:00`).toLocaleDateString()
+    await addIngredientsGroupToShoppingList(ingredients, `for ${friendlyDate}`)
+  }
+
+  const handleAddWeekToShoppingList = async () => {
+    const weekDateKeys = getWeekDates().map(date => date.toISOString().split('T')[0])
+    const weekDateSet = new Set(weekDateKeys)
+    const weekMeals = Object.values(plannedMeals).filter(meal => weekDateSet.has(meal.date))
+
+    if (weekMeals.length === 0) {
+      alert('No meals planned for this week.')
+      return
+    }
+
+    const ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> = []
+    weekMeals.forEach(meal => {
+      ingredients.push(...extractIngredientsForShopping(meal.recipe as any))
+    })
+
+    await addIngredientsGroupToShoppingList(ingredients, 'for this week')
+  }
 
   useEffect(() => {
     loadFilters()
@@ -635,7 +722,20 @@ export const MealPlanningPage: React.FC = () => {
             cursor: 'pointer',
             fontWeight: 'bold'
           }
-        }, '🤖 Smart Meal Plan')
+        }, '🤖 Smart Meal Plan'),
+        React.createElement('button', {
+          key: 'add-week-shopping',
+          onClick: handleAddWeekToShoppingList,
+          style: {
+            padding: '0.5rem 1rem',
+            background: '#3b82f6',
+            color: 'white',
+            border: '1px solid #2563eb',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }
+        }, '🛒 Add Week to Shopping List')
       ]),
       
       // Right clear buttons
@@ -750,24 +850,42 @@ export const MealPlanningPage: React.FC = () => {
       React.createElement('div', { key: 'corner' }),
 
       // Day headers
-      ...weekDates.map(date => 
-        React.createElement('div', {
+      ...weekDates.map(date => {
+        const dateStr = date.toISOString().split('T')[0]
+        return React.createElement('div', {
           key: `header-${date.toISOString()}`,
           style: {
             textAlign: 'center',
-            padding: '0.5rem',
+            padding: '0.75rem 0.5rem 0.5rem',
             background: '#1e293b',
             border: '1px solid #334155',
             borderRadius: '0.375rem',
             color: '#f1f5f9',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            position: 'relative'
           }
         }, [
           React.createElement('div', { key: 'day' }, date.toLocaleDateString('en-US', { weekday: 'short' })),
           React.createElement('div', { key: 'date', style: { fontSize: '0.875rem', color: '#94a3b8' } }, 
-            date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+            date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+          React.createElement('button', {
+            key: 'add-day-shopping',
+            onClick: () => handleAddDayToShoppingList(dateStr),
+            style: {
+              position: 'absolute',
+              top: '0.25rem',
+              right: '0.25rem',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.25rem',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              padding: '0.25rem 0.5rem'
+            }
+          }, '🛒')
         ])
-      ),
+      }),
 
       // Meal rows
       ...activeMealSlots.map(mealSlot => [
@@ -872,6 +990,24 @@ export const MealPlanningPage: React.FC = () => {
                   onClick: (e: React.MouseEvent) => handleMealCardClick(dateStr, mealSlot, e)
                 }, '🔄 Change'),
                 React.createElement('button', {
+                  key: 'add-shopping',
+                  onClick: async (e: React.MouseEvent) => {
+                    e.stopPropagation()
+                    await handleAddRecipeIngredientsToShoppingList(plannedMeal.recipe)
+                  },
+                  style: {
+                    padding: '0.25rem 0.5rem',
+                    background: '#2563eb',
+                    color: '#f1f5f9',
+                    border: '1px solid #1d4ed8',
+                    borderRadius: '0.25rem',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    marginLeft: '0.5rem',
+                    marginRight: '0.5rem'
+                  }
+                }, '🛒 Add'),
+                React.createElement('button', {
                   key: 'remove',
                   className: 'remove-button',
                   onClick: (e: React.MouseEvent) => {
@@ -928,7 +1064,8 @@ export const MealPlanningPage: React.FC = () => {
       recipe: viewingRecipe?.recipe || null,
       isAIGenerated: viewingRecipe ? isAIGenerated(viewingRecipe.recipe) : false,
       onSaveRecipe: handleSaveEditedRecipe,
-      onReplaceMeal: handleReplaceMeal
+      onReplaceMeal: handleReplaceMeal,
+      onAddToShoppingList: viewingRecipe ? () => handleAddRecipeIngredientsToShoppingList(viewingRecipe.recipe) : undefined
     }),
     // Clear Confirmation Modal
     showClearConfirm && React.createElement('div', {

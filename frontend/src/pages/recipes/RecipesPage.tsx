@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { fetchRecipes, createRecipe, updateRecipe, deleteRecipe } from '../../store/slices/recipesSlice'
-import { fetchGroceryLists } from '../../store/slices/grocerySlice'
 import { RootState } from '../../store'
+import { RecipeViewModal } from '../../components/meal-planning/RecipeViewModal'
+import { shoppingListService } from '../../services/shoppingListService'
+import { recipeService } from '../../services/recipeService'
 
 const RecipesPage = () => {
   const dispatch = useDispatch()
@@ -11,9 +13,8 @@ const RecipesPage = () => {
   const [showAddForm, setShowAddForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<any>(null)
-  const [showAddToGroceryList, setShowAddToGroceryList] = useState(false)
-  const [selectedRecipeForGrocery, setSelectedRecipeForGrocery] = useState<any>(null)
-  const [selectedGroceryList, setSelectedGroceryList] = useState('')
+  const [showRecipeView, setShowRecipeView] = useState(false)
+  const [viewingRecipeDetail, setViewingRecipeDetail] = useState<{ formatted: any; raw: any } | null>(null)
   const [newRecipe, setNewRecipe] = useState({
     name: '',
     description: '',
@@ -28,11 +29,9 @@ const RecipesPage = () => {
   })
 
   const { recipes } = useSelector((state: RootState) => state.recipes)
-  const { groceryLists } = useSelector((state: RootState) => state.grocery)
 
   useEffect(() => {
     dispatch(fetchRecipes())
-    dispatch(fetchGroceryLists() as any)
   }, [dispatch])
 
   const filteredRecipes = recipes.filter(recipe => {
@@ -41,6 +40,145 @@ const RecipesPage = () => {
     const matchesCategory = selectedCategory === 'all' || recipe.mealType === selectedCategory
     return matchesSearch && matchesCategory
   })
+
+  const transformRecipeForModal = (recipeData: any) => {
+    const formattedIngredients = Array.isArray(recipeData.ingredients)
+      ? recipeData.ingredients.map((ing: any) => {
+          const parts = [] as string[]
+          if (ing.quantity !== null && ing.quantity !== undefined && ing.quantity !== '') {
+            parts.push(String(ing.quantity))
+          }
+          if (ing.unit) {
+            parts.push(ing.unit)
+          }
+          if (ing.name) {
+            parts.push(ing.name)
+          }
+          return parts.join(' ').trim()
+        }).filter((line: string) => line.length > 0)
+      : []
+
+    const capitalize = (value: string | undefined) => {
+      if (!value) return 'Dinner'
+      return value.charAt(0).toUpperCase() + value.slice(1)
+    }
+
+    return {
+      id: recipeData.id?.toString() || '',
+      name: recipeData.name || 'Untitled Recipe',
+      category: capitalize(recipeData.meal_type) as any,
+      instructions: recipeData.instructions || '',
+      ingredients: formattedIngredients,
+      prepTime: recipeData.prep_time ?? recipeData.prepTime ?? 30,
+      cookTime: recipeData.cook_time ?? recipeData.cookTime ?? 30,
+      servings: recipeData.servings ?? 4,
+      difficulty: recipeData.difficulty || 'medium',
+      createdAt: recipeData.created_at || new Date().toISOString(),
+      updatedAt: recipeData.updated_at || new Date().toISOString()
+    }
+  }
+
+  const loadRecipeDetails = async (recipeId: string | number) => {
+    const id = String(recipeId)
+    const response = await fetch(`/api/recipes/${id}`)
+    if (!response.ok) {
+      throw new Error('Failed to load recipe details')
+    }
+    const recipeData = await response.json()
+    return {
+      formatted: transformRecipeForModal(recipeData),
+      raw: recipeData
+    }
+  }
+
+  const buildShoppingIngredientsFromRecipe = (recipeData: any) => {
+    if (!recipeData) return []
+
+    if (Array.isArray(recipeData.ingredients) && recipeData.ingredients.length > 0) {
+      return recipeData.ingredients
+        .map((ing: any) => {
+          const quantity = ing.quantity !== null && ing.quantity !== undefined && ing.quantity !== ''
+            ? ing.quantity
+            : null
+          const unit = ing.unit || null
+          const name = ing.name || null
+          const text = [quantity, unit, name]
+            .filter(part => part !== null && part !== undefined && String(part).trim().length > 0)
+            .map(part => String(part).trim())
+            .join(' ')
+            .trim()
+
+          if (!text) {
+            return null
+          }
+
+          return {
+            text,
+            quantity: quantity === null ? null : String(quantity),
+            unit,
+            name
+          }
+        })
+        .filter(Boolean)
+    }
+
+    if (typeof recipeData.instructions === 'string' && recipeData.instructions.trim()) {
+      const parsed = recipeService.parseInstructions(recipeData.instructions)
+      if (parsed.items.length > 0) {
+        return parsed.items.map(item => ({
+          text: item.text,
+          quantity: item.quantity ?? item.quantityValue ?? null,
+          unit: item.unit ?? null,
+          name: item.name ?? null
+        }))
+      }
+    }
+
+    return []
+  }
+
+  const handleViewRecipe = async (recipeId: string | number) => {
+    try {
+      const details = await loadRecipeDetails(recipeId)
+      setViewingRecipeDetail(details)
+      setShowRecipeView(true)
+    } catch (error) {
+      console.error('Error fetching recipe:', error)
+      alert('Error loading recipe details')
+    }
+  }
+
+  const handleAddRecipeIngredientsToShoppingList = async (recipeId: string | number) => {
+    try {
+      const recipeIdStr = String(recipeId)
+
+      let recipeData = viewingRecipeDetail?.raw && viewingRecipeDetail.raw.id?.toString() === recipeIdStr
+        ? viewingRecipeDetail.raw
+        : null
+
+      if (!recipeData) {
+        const details = await loadRecipeDetails(recipeIdStr)
+        recipeData = details.raw
+      }
+
+      const ingredients = buildShoppingIngredientsFromRecipe(recipeData)
+      if (!ingredients.length) {
+        alert('No ingredients found for this recipe.')
+        return
+      }
+
+      const addedItems = await shoppingListService.addIngredientsToList(ingredients)
+      if (!addedItems.length) {
+        alert('No ingredients were added to the shopping list.')
+        return
+      }
+
+      alert(`Added ${addedItems.length} ingredient${addedItems.length === 1 ? '' : 's'} to your shopping list.`)
+    } catch (error) {
+      console.error('Error adding recipe ingredients to shopping list:', error)
+      alert('Failed to add ingredients to shopping list.')
+    }
+  }
 
   const handleAddIngredient = () => {
     setNewRecipe(prev => ({
@@ -113,19 +251,6 @@ const handleSubmit = async (e: React.FormEvent) => {
     }
   }
 
-  const handleViewRecipe = async (recipeId: string) => {
-    try {
-      const response = await fetch(`/api/recipes/${recipeId}`)
-      if (response.ok) {
-        const recipeData = await response.json()
-        alert(`Recipe: ${recipeData.name}\n\nDescription: ${recipeData.description}\n\nInstructions: ${recipeData.instructions}\n\nIngredients: ${recipeData.ingredients?.map((ing: any) => `${ing.quantity} ${ing.unit} ${ing.name}`).join(', ') || 'None'}`)
-      }
-    } catch (error) {
-      console.error('Error fetching recipe:', error)
-      alert('Error loading recipe details')
-    }
-  }
-
   const handleEditRecipe = (recipe: any) => {
     // Transform API data to match form structure
     const transformedRecipe = {
@@ -195,27 +320,6 @@ const handleSubmit = async (e: React.FormEvent) => {
     } catch (error) {
       console.error('Error deleting recipe:', error)
       alert('Failed to delete recipe')
-    }
-  }
-
-  const handleAddToGroceryList = (recipe: any) => {
-    setSelectedRecipeForGrocery(recipe)
-    setShowAddToGroceryList(true)
-  }
-
-  const handleAddRecipeToGroceryList = async () => {
-    if (!selectedRecipeForGrocery || !selectedGroceryList) return
-    
-    try {
-      // This would need an API endpoint to add recipe ingredients to a grocery list
-      // For now, we'll show a success message
-      alert(`Added "${selectedRecipeForGrocery.name}" ingredients to grocery list!`)
-      setShowAddToGroceryList(false)
-      setSelectedRecipeForGrocery(null)
-      setSelectedGroceryList('')
-    } catch (error) {
-      console.error('Error adding recipe to grocery list:', error)
-      alert('Failed to add recipe to grocery list')
     }
   }
 
@@ -306,9 +410,9 @@ const handleSubmit = async (e: React.FormEvent) => {
                     View Recipe
                   </button>
                   <button 
-                    onClick={() => handleAddToGroceryList(recipe)}
+                    onClick={() => handleAddRecipeIngredientsToShoppingList(recipe.id)}
                     className="px-3 py-2 border border-green-300 rounded-md text-sm font-medium text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-300 dark:hover:bg-green-900/20"
-                    title="Add to grocery list"
+                    title="Add ingredients to shopping list"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -788,72 +892,17 @@ const handleSubmit = async (e: React.FormEvent) => {
       )}
 
       {/* Add to Grocery List Modal */}
-      {showAddToGroceryList && selectedRecipeForGrocery && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 dark:bg-black dark:bg-opacity-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-dark-800 dark:border-gray-700">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Add to Grocery List</h3>
-                <button
-                  onClick={() => setShowAddToGroceryList(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Add ingredients from "<span className="font-medium">{selectedRecipeForGrocery.name}</span>" to:
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-                    Grocery List
-                  </label>
-                  <select
-                    value={selectedGroceryList}
-                    onChange={(e) => setSelectedGroceryList(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-dark-700 dark:text-white"
-                  >
-                    <option value="">Select a grocery list</option>
-                    {groceryLists.map((list) => (
-                      <option key={list.id} value={list.id}>
-                        {list.name} ({list.items?.length || 0} items)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {groceryLists.length === 0 && (
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    No grocery lists found. <a href="/grocery-lists" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">Create one first</a>.
-                  </div>
-                )}
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowAddToGroceryList(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddRecipeToGroceryList}
-                    disabled={!selectedGroceryList}
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed dark:bg-green-600 dark:hover:bg-green-700"
-                  >
-                    Add Ingredients
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {showRecipeView && viewingRecipeDetail && (
+        <RecipeViewModal
+          isOpen={showRecipeView}
+          onClose={() => {
+            setShowRecipeView(false)
+            setViewingRecipeDetail(null)
+          }}
+          recipe={viewingRecipeDetail.formatted}
+          isAIGenerated={false}
+          onAddToShoppingList={() => handleAddRecipeIngredientsToShoppingList(viewingRecipeDetail.raw.id)}
+        />
       )}
     </div>
   )

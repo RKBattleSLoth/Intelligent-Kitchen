@@ -9,6 +9,7 @@ interface RecipeViewModalProps {
   isAIGenerated: boolean
   onSaveRecipe?: (recipe: Recipe) => void
   onReplaceMeal?: () => void
+  onAddToShoppingList?: () => Promise<void> | void
 }
 
 export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
@@ -17,11 +18,13 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   recipe,
   isAIGenerated,
   onSaveRecipe,
-  onReplaceMeal
+  onReplaceMeal,
+  onAddToShoppingList
 }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedRecipe, setEditedRecipe] = useState<Recipe | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isAddingToList, setIsAddingToList] = useState(false)
 
   // Reset state when recipe changes
   useEffect(() => {
@@ -90,6 +93,18 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
         typeof ing === 'string' ? ing : `${ing.quantity || ''} ${ing.unit || ''} ${ing.name || ''}`.trim()
       ).filter(Boolean)
     : []
+
+  const handleAddToShoppingList = async () => {
+    if (!onAddToShoppingList) return
+    try {
+      setIsAddingToList(true)
+      await onAddToShoppingList()
+    } catch (error) {
+      console.error('Error adding ingredients to shopping list:', error)
+    } finally {
+      setIsAddingToList(false)
+    }
+  }
 
   return React.createElement('div', {
     style: {
@@ -336,7 +351,22 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               marginRight: '0.75rem',
               opacity: isSaving ? 0.7 : 1
             }
-          }, isSaving ? 'Saving...' : '💾 Save to Recipes')
+          }, isSaving ? 'Saving...' : '💾 Save to Recipes'),
+          onAddToShoppingList && React.createElement('button', {
+            key: 'add-to-shopping-list',
+            onClick: handleAddToShoppingList,
+            disabled: isAddingToList,
+            style: {
+              padding: '0.75rem 1.5rem',
+              background: '#3b82f6',
+              color: 'white',
+              border: '1px solid #2563eb',
+              borderRadius: '0.375rem',
+              cursor: isAddingToList ? 'not-allowed' : 'pointer',
+              fontWeight: 'bold',
+              opacity: isAddingToList ? 0.7 : 1
+            }
+          }, isAddingToList ? 'Adding...' : '🛒 Add to Shopping List')
         ]),
         React.createElement('div', { key: 'right-buttons' }, [
           isEditing ? [
@@ -366,34 +396,43 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
                 fontWeight: 'bold'
               }
             }, 'Save Changes')
-          ] : [
-            React.createElement('button', {
-              key: 'change-meal',
-              onClick: onReplaceMeal,
-              style: {
-                padding: '0.75rem 1.5rem',
-                background: '#374151',
-                color: '#f1f5f9',
-                border: '1px solid #4b5563',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                marginRight: '0.75rem'
-              }
-            }, '🔄 Change Recipe'),
-            React.createElement('button', {
-              key: 'edit',
-              onClick: handleEdit,
-              style: {
-                padding: '0.75rem 1.5rem',
-                background: '#f59e0b',
-                color: 'white',
-                border: '1px solid #d97706',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }
-            }, '✏️ Edit')
-          ]
+          ] : (() => {
+            const buttons: React.ReactNode[] = []
+
+            if (onReplaceMeal) {
+              buttons.push(React.createElement('button', {
+                key: 'change-meal',
+                onClick: onReplaceMeal,
+                style: {
+                  padding: '0.75rem 1.5rem',
+                  background: '#374151',
+                  color: '#f1f5f9',
+                  border: '1px solid #4b5563',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  marginRight: onSaveRecipe ? '0.75rem' : '0rem'
+                }
+              }, '🔄 Change Recipe'))
+            }
+
+            if (onSaveRecipe) {
+              buttons.push(React.createElement('button', {
+                key: 'edit',
+                onClick: handleEdit,
+                style: {
+                  padding: '0.75rem 1.5rem',
+                  background: '#f59e0b',
+                  color: 'white',
+                  border: '1px solid #d97706',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }
+              }, '✏️ Edit'))
+            }
+
+            return buttons
+          })()
         ])
       ])
     ])

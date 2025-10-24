@@ -49,6 +49,74 @@ class ShoppingListService {
     return newItem;
   }
 
+  async addIngredientsToList(ingredients: Array<string | {
+    text?: string;
+    quantity?: string | number | null;
+    amount?: string | number | null;
+    quantityValue?: number | null;
+    unit?: string | null;
+    name?: string | null;
+  }>): Promise<ShoppingListItem[]> {
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      return [];
+    }
+
+    const addedItems: ShoppingListItem[] = [];
+
+    for (const ingredient of ingredients) {
+      if (!ingredient) {
+        continue;
+      }
+
+      if (typeof ingredient === 'string') {
+        const trimmed = ingredient.trim();
+        if (!trimmed) {
+          continue;
+        }
+        try {
+          const newItem = await this.addShoppingListItem(trimmed);
+          addedItems.push(newItem);
+        } catch (error) {
+          console.error('Failed to add shopping list item from string ingredient:', error);
+        }
+        continue;
+      }
+
+      const quantitySource = ingredient.quantity ?? ingredient.amount ?? ingredient.quantityValue ?? null;
+      const quantityText = quantitySource === null || quantitySource === undefined
+        ? null
+        : typeof quantitySource === 'number'
+          ? quantitySource.toString()
+          : String(quantitySource).trim();
+
+      const unitText = ingredient.unit ? String(ingredient.unit).trim() : null;
+      const nameText = ingredient.name ? String(ingredient.name).trim() : null;
+
+      const baseText = ingredient.text?.trim() || [quantityText, unitText, nameText]
+        .filter(part => part && String(part).trim().length > 0)
+        .join(' ')
+        .trim();
+
+      if (!baseText) {
+        continue;
+      }
+
+      try {
+        const newItem = await this.addShoppingListItem({
+          text: baseText,
+          quantity: quantityText,
+          unit: unitText,
+          name: nameText || baseText
+        });
+        addedItems.push(newItem);
+      } catch (error) {
+        console.error('Failed to add shopping list item from structured ingredient:', error);
+      }
+    }
+
+    return addedItems;
+  }
+
   async updateShoppingListItem(itemId: string, updates: Partial<ShoppingListItem>): Promise<ShoppingListItem> {
     const items = this.getItems();
     const itemIndex = items.findIndex(item => item.id === itemId);

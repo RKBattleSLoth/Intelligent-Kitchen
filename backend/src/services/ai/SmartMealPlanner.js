@@ -118,11 +118,60 @@ class SmartMealPlanner {
       }
       
       console.log('🎉 [SMART_MEAL_PLANNER] AI generation successful');
-      return {
+      let coverageInfo = null;
+      try {
+        coverageInfo = await this.ensureCompleteMealCoverage({
+          existingMeals: mealPlanData.meals,
+          startDate,
+          endDate,
+          mealTypes,
+          userId,
+          preferences,
+          recipeSource,
+          peopleCount
+        });
+
+        if (coverageInfo?.meals) {
+          mealPlanData.meals = coverageInfo.meals;
+        }
+
+        if (coverageInfo) {
+          console.log('🧮 [SMART_MEAL_PLANNER] Meal coverage summary:', {
+            expectedMeals: dayCount * mealTypes.length,
+            actualMeals: mealPlanData.meals.length,
+            initialMissingCount: coverageInfo.initialMissingCount,
+            missingMealCount: coverageInfo.missingMealCount,
+            fallbackMealsAdded: coverageInfo.fallbackMealsAdded,
+            removedDuplicates: coverageInfo.removedDuplicates,
+            invalidMealsFiltered: coverageInfo.invalidMealsFiltered
+          });
+        }
+      } catch (coverageError) {
+        console.error('❌ [SMART_MEAL_PLANNER] Failed to ensure complete meal coverage:', {
+          error: coverageError.message,
+          stack: coverageError.stack
+        });
+      }
+
+      const responsePayload = {
         success: true,
         mealPlan: mealPlanData,
         rawResponse: response
       };
+
+      if (coverageInfo?.fallbackMealsAdded > 0 || coverageInfo?.missingMealCount > 0) {
+        responsePayload.fallback = true;
+        responsePayload.message = 'Supplemented AI meal plan with fallback meals to ensure full coverage';
+        responsePayload.fallbackDetails = {
+          fallbackMealsAdded: coverageInfo?.fallbackMealsAdded || 0,
+          initialMissingCount: coverageInfo?.initialMissingCount || 0,
+          missingMealCount: coverageInfo?.missingMealCount || 0,
+          removedDuplicates: coverageInfo?.removedDuplicates || 0,
+          invalidMealsFiltered: coverageInfo?.invalidMealsFiltered || 0
+        };
+      }
+
+      return responsePayload;
     } catch (error) {
       console.error('❌ [SMART_MEAL_PLANNER] Error generating meal plan via AI:', {
         error: error.message,
@@ -376,6 +425,122 @@ OUTPUT RULES:
         parsingError: true
       };
     }
+  }
+
+  async ensureCompleteMealCoverage({
+    existingMeals = [],
+    startDate,
+    endDate,
+    mealTypes,
+    userId,
+    preferences,
+    recipeSource,
+    peopleCount
+  }) {
+    const mealTypeOrder = (mealTypes || []).map(type => type.toLowerCase());
+    const requiredKeys = new Set();
+
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+
+    for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      const current = new Date(cursor);
+      const dateKey = current.toISOString().split('T')[0];
+      mealTypeOrder.forEach(mealType => {
+        requiredKeys.add(`${dateKey}|${mealType}`);
+      });
+    }
+
+    const uniqueMeals = new Map();
+    let removedDuplicates = 0;
+    let invalidMealsFiltered = 0;
+
+    for (const meal of Array.isArray(existingMeals) ? existingMeals : []) {
+      if (!meal || !meal.date || !meal.mealType) {
+        invalidMealsFiltered++;
+        continue;
+      }
+
+      const mealType = meal.mealType.toLowerCase();
+      const key = `${meal.date}|${mealType}`;
+
+      if (!requiredKeys.has(key) || !mealTypeOrder.includes(mealType)) {
+        invalidMealsFiltered++;
+        continue;
+      }
+
+      if (uniqueMeals.has(key)) {
+        removedDuplicates++;
+        continue;
+      }
+
+      uniqueMeals.set(key, { ...meal, mealType });
+    }
+
+    let missingKeys = Array.from(requiredKeys).filter(key => !uniqueMeals.has(key));
+    const initialMissingCount = missingKeys.length;
+    let fallbackMealsAdded = 0;
+
+    if (missingKeys.length > 0) {
+      const fallbackPlan = await this.generateFallbackMealPlan({
+        userId,
+        startDate,
+        endDate,
+        mealTypes,
+        preferences,
+        recipeSource,
+        peopleCount
+      });
+
+      const fallbackMap = new Map(
+        (fallbackPlan?.meals || []).map(fallbackMeal => [`${fallbackMeal.date}|${fallbackMeal.mealType}`, fallbackMeal])
+      );
+
+      for (const key of missingKeys) {
+        if (uniqueMeals.has(key)) continue;
+        const fallbackMeal = fallbackMap.get(key);
+        if (fallbackMeal) {
+          uniqueMeals.set(key, { ...fallbackMeal });
+          fallbackMealsAdded++;
+        }
+      }
+
+      missingKeys = Array.from(requiredKeys).filter(key => !uniqueMeals.has(key));
+
+      for (const key of missingKeys) {
+        const [date, mealType] = key.split('|');
+        uniqueMeals.set(key, {
+          date,
+          mealType,
+          name: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} Chef Selection`,
+          description: `Auto-generated ${mealType} meal for ${date}`,
+          instructions: this.generateInstructionsFromDescription(
+            `Prepare a balanced ${mealType} meal for ${peopleCount} people using pantry staples.`
+          ) || 'Step 1: Gather ingredients.\nStep 2: Cook meal according to standard techniques.\nStep 3: Serve immediately.',
+          ingredients: [],
+          cookTime: 30,
+          difficulty: 'easy',
+          isUserRecipe: false,
+          userRecipeId: null
+        });
+      }
+    }
+
+    const sortedMeals = Array.from(uniqueMeals.values()).sort((a, b) => {
+      if (a.date === b.date) {
+        return mealTypeOrder.indexOf(a.mealType) - mealTypeOrder.indexOf(b.mealType);
+      }
+      return a.date < b.date ? -1 : 1;
+    });
+
+    return {
+      meals: sortedMeals,
+      fallbackMealsAdded,
+      missingMealCount: Array.from(requiredKeys).filter(key => !uniqueMeals.has(key)).length,
+      removedDuplicates,
+      invalidMealsFiltered,
+      initialMissingCount
+    };
   }
 
   async generateFallbackMealPlan({ userId, startDate, endDate, mealTypes, preferences, recipeSource, peopleCount }) {
