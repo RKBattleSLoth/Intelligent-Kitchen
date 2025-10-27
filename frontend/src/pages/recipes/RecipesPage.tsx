@@ -455,7 +455,16 @@ const RecipesPage = () => {
                 <h3
                   className="text-lg font-semibold text-gray-900 mb-2 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                   onClick={() => handleViewRecipe(recipe.id)}
-                  style={{ textDecoration: 'underline', textDecorationStyle: 'dotted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+                  style={{ 
+                    textDecoration: 'underline', 
+                    textDecorationStyle: 'dotted', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap', 
+                    display: 'block',
+                    maxWidth: '100%',
+                    width: '100%'
+                  }}
                   title={recipe.name}
                 >
                   {recipe.name.length > 100 ? recipe.name.substring(0, 100) + '...' : recipe.name}

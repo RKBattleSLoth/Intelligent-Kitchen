@@ -707,6 +707,11 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                   key: 'text',
                   type: 'text',
                   defaultValue: item.item_text,
+                  onKeyDown: (e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  },
                   onBlur: (e) => {
                     const newText = e.currentTarget.value;
                     if (newText.trim() && newText !== item.item_text) {
