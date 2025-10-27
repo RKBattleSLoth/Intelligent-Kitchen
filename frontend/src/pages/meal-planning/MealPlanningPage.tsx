@@ -1226,7 +1226,7 @@ export const MealPlanningPage: React.FC = () => {
                   onMouseLeave: (e) => {
                     (e.currentTarget as HTMLButtonElement).style.background = '#2563eb'
                   }
-                }, '🛒 Add'),
+                }, '🛒 Add to Shopping'),
                 React.createElement('button', {
                   key: 'remove',
                   className: 'remove-button',
