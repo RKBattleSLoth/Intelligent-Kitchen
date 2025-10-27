@@ -918,7 +918,7 @@ export const MealPlanningPage: React.FC = () => {
             opacity: selectedDates.size === 0 ? 0.7 : 1,
             whiteSpace: 'nowrap'
           }
-        }, `Add (${selectedDates.size})`),
+        }, `🛒 Add to Shopping (${selectedDates.size})`),
         isSelectingDays && React.createElement('button', {
           key: 'clear-selected-days',
           onClick: handleClearSelectedDates,
@@ -1180,9 +1180,9 @@ export const MealPlanningPage: React.FC = () => {
                     flex: '1',
                     minWidth: '50px',
                     padding: '0.35rem 0.6rem',
-                    background: '#374151',
-                    color: '#f1f5f9',
-                    border: '1px solid #4b5563',
+                    background: '#991b1b',
+                    color: '#fecaca',
+                    border: '1px solid #7f1d1d',
                     borderRadius: '0.25rem',
                     fontSize: '0.75rem',
                     cursor: 'pointer',
@@ -1190,10 +1190,10 @@ export const MealPlanningPage: React.FC = () => {
                     transition: 'all 0.2s'
                   },
                   onMouseEnter: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#475569'
+                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
                   },
                   onMouseLeave: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#374151'
+                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
                   }
                 }, '🔄 Change'),
                 React.createElement('button', {
@@ -1211,9 +1211,9 @@ export const MealPlanningPage: React.FC = () => {
                     flex: '1',
                     minWidth: '50px',
                     padding: '0.35rem 0.6rem',
-                    background: '#2563eb',
-                    color: 'white',
-                    border: '1px solid #1d4ed8',
+                    background: '#991b1b',
+                    color: '#fecaca',
+                    border: '1px solid #7f1d1d',
                     borderRadius: '0.25rem',
                     fontSize: '0.75rem',
                     cursor: 'pointer',
@@ -1221,12 +1221,12 @@ export const MealPlanningPage: React.FC = () => {
                     transition: 'all 0.2s'
                   },
                   onMouseEnter: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#1d4ed8'
+                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
                   },
                   onMouseLeave: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#2563eb'
+                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
                   }
-                }, '🛒 Add to Shopping'),
+                }, '🛒 Add'),
                 React.createElement('button', {
                   key: 'remove',
                   className: 'remove-button',
