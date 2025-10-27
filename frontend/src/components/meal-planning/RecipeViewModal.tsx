@@ -119,25 +119,23 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
 
   const currentRecipe = editedRecipe || recipe
   
-  // Helper function to extract ingredients from recipe - matching ShoppingList and RecipeList logic
+  // Helper function to extract ingredients from recipe - only use structured ingredients
   const extractIngredientsForDisplay = (recipe: Recipe): string[] => {
     if (!recipe) return []
 
+    // Only show structured ingredients array, don't parse from instructions
+    // to avoid duplication with the instructions section
     if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
       return recipe.ingredients.map(ing => 
         typeof ing === 'string' ? ing : `${ing.quantity || ''} ${ing.unit || ''} ${ing.name || ''}`.trim()
       ).filter(Boolean)
     }
 
-    if (typeof recipe.instructions === 'string' && recipe.instructions.trim()) {
-      const parsed = recipeService.parseInstructions(recipe.instructions)
-      if (parsed.items.length > 0) {
-        return parsed.items.map(item => item.text).filter(Boolean)
-      }
-    }
-
     return []
   }
+
+  // Check if we have ingredients to display
+  const hasStructuredIngredients = Array.isArray(currentRecipe.ingredients) && currentRecipe.ingredients.length > 0
 
   const displayIngredients = extractIngredientsForDisplay(currentRecipe)
   const ingredientCount = displayIngredients.length
@@ -388,8 +386,8 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
       ] : [
         // View Mode
         React.createElement('div', { key: 'view-content' }, [
-          // Ingredients
-          React.createElement('div', {
+          // Ingredients - only show if there are structured ingredients
+          hasStructuredIngredients && React.createElement('div', {
             key: 'ingredients',
             style: { marginBottom: '1.5rem' }
           }, [
@@ -404,8 +402,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
                 padding: 0,
                 margin: 0
               }
-            }, displayIngredients.length > 0 
-              ? displayIngredients.map((ingredient, index) => 
+            }, displayIngredients.map((ingredient, index) => 
                   React.createElement('li', {
                     key: index,
                     style: {
@@ -415,9 +412,6 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
                     }
                   }, `• ${ingredient}`)
                 )
-              : React.createElement('li', {
-                  style: { color: '#94a3b8', fontStyle: 'italic' }
-                }, 'No ingredients listed')
             )
           ]),
 
