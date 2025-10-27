@@ -1155,14 +1155,13 @@ export const MealPlanningPage: React.FC = () => {
                 style: {
                   fontSize: '0.875rem',
                   fontWeight: 'bold',
-                  color: isAIGenerated(plannedMeal.recipe) ? '#60a5fa' : '#f1f5f9',
+                  color: '#60a5fa',
                   marginBottom: '0.25rem',
                   cursor: 'pointer',
                   textDecoration: 'underline',
                   textDecorationStyle: 'dotted',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
                 },
                 title: plannedMeal.recipe.name
               }, plannedMeal.recipe.name.length > 100 ? plannedMeal.recipe.name.substring(0, 100) + '...' : plannedMeal.recipe.name),
@@ -1257,7 +1256,7 @@ export const MealPlanningPage: React.FC = () => {
                   onMouseLeave: (e) => {
                     (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
                   }
-                }, 'Remove')
+                }, '🗑️ Remove')
               ])
             ] : [
               React.createElement('div', {

@@ -701,12 +701,13 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                 React.createElement('input', {
                   key: 'text',
                   type: 'text',
-                  value: item.item_text,
-                  onChange: (e) => updateItemText(item, e.target.value),
+                  defaultValue: item.item_text,
                   onBlur: (e) => {
-                    if (!e.target.value.trim()) {
-                      // Revert to original if empty
-                      e.target.value = item.item_text;
+                    const newText = e.currentTarget.value;
+                    if (newText.trim() && newText !== item.item_text) {
+                      updateItemText(item, newText);
+                    } else if (!newText.trim()) {
+                      e.currentTarget.value = item.item_text;
                     }
                   },
                   style: {
