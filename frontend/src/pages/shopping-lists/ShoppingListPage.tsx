@@ -635,7 +635,12 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           value: newItemText,
           onChange: (e) => setNewItemText(e.target.value),
           placeholder: 'Add item to shopping list...',
-          onKeyPress: (e) => e.key === 'Enter' && addItem(),
+          onKeyPress: (e) => {
+            if (e.key === 'Enter') {
+              addItem();
+              e.currentTarget.blur();
+            }
+          },
           autoFocus: true,
           style: {
             flex: 1,
