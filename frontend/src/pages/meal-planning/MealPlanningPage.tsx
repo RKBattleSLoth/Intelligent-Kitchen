@@ -579,6 +579,14 @@ export const MealPlanningPage: React.FC = () => {
     }
   }
 
+  const handleClearSelectedDates = () => {
+    if (selectedDates.size === 0) {
+      alert('No days selected.')
+      return
+    }
+    handleClearConfirm('selected')
+  }
+
   const handleClearConfirm = (action: string) => {
     setClearAction(action)
     setShowClearConfirm(true)
@@ -601,6 +609,12 @@ export const MealPlanningPage: React.FC = () => {
         break
       case 'ai':
         handleClearAIRecipes()
+        break
+      case 'selected':
+        selectedDates.forEach(date => handleClearDay(date))
+        setShowClearConfirm(false)
+        setClearAction(null)
+        resetDaySelection()
         break
       default:
         break
@@ -905,6 +919,23 @@ export const MealPlanningPage: React.FC = () => {
             whiteSpace: 'nowrap'
           }
         }, `Add (${selectedDates.size})`),
+        isSelectingDays && React.createElement('button', {
+          key: 'clear-selected-days',
+          onClick: handleClearSelectedDates,
+          disabled: selectedDates.size === 0,
+          style: {
+            padding: '0.6rem 1.25rem',
+            background: selectedDates.size === 0 ? '#475569' : '#dc2626',
+            color: 'white',
+            border: `1px solid ${selectedDates.size === 0 ? '#4b5563' : '#b91c1c'}`,
+            borderRadius: '0.375rem',
+            cursor: selectedDates.size === 0 ? 'not-allowed' : 'pointer',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            opacity: selectedDates.size === 0 ? 0.7 : 1,
+            whiteSpace: 'nowrap'
+          }
+        }, `Clear (${selectedDates.size})`),
         React.createElement('button', {
           key: 'clear-main',
           onClick: () => handleClearConfirm('week'),
@@ -1305,6 +1336,7 @@ export const MealPlanningPage: React.FC = () => {
         }, 
           clearAction === 'week' ? 'Are you sure you want to clear all meals for the current week? This action cannot be undone.' :
           clearAction === 'all' ? 'Are you sure you want to clear ALL meal plans? This will delete all your saved meal planning data and cannot be undone.' :
+          clearAction === 'selected' ? `Are you sure you want to clear all meals for the ${selectedDates.size} selected day${selectedDates.size === 1 ? '' : 's'}? This action cannot be undone.` :
           `Are you sure you want to clear all ${clearAction} meals? This action cannot be undone.`
         ),
         

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { shoppingListService, ShoppingListItem } from '../../services/shoppingListService';
+import { shoppingListService } from '../../services/shoppingListService';
 import { aiService, IngredientExtractionResult } from '../../services/aiService';
-import { recipeService, Recipe } from '../../services/recipeService';
+import { recipeService } from '../../services/recipeService';
+import { ShoppingListItem } from '../../types/shoppingList';
+import { Recipe } from '../../types/recipe';
 
 interface ShoppingListPageProps {}
 

@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
-import { fetchPantryItems } from '../../store/slices/pantrySlice'
-import { RootState } from '../../store'
+import { useState, useEffect, useCallback } from 'react'
+import { pantryService, PantryItem } from '../../services/pantryService'
 
 const PantryPage = () => {
-  const dispatch = useDispatch()
   const [searchTerm, setSearchTerm] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [newItem, setNewItem] = useState({
@@ -13,26 +10,75 @@ const PantryPage = () => {
     category: '',
     expirationDate: ''
   })
+  const [items, setItems] = useState<PantryItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const { items, isLoading, error } = useSelector((state: RootState) => state.pantry)
+  const loadPantryItems = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      const pantryItems = await pantryService.getAllItems()
+      setItems(pantryItems)
+    } catch (err) {
+      console.error('Error loading pantry items:', err)
+      setError('Failed to load pantry items. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    dispatch(fetchPantryItems())
-  }, [dispatch])
+    loadPantryItems()
+  }, [loadPantryItems])
 
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ).map(item => ({
-    ...item,
-    quantity: `${item.quantity} ${item.unit || ''}`.trim(),
-    isExpiringSoon: item.expirationDate ? new Date(item.expirationDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : false
-  }))
+  const filteredItems = items
+    .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .map(item => {
+      const expiration = item.expirationDate ? new Date(item.expirationDate) : null
+      const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
-  const handleAddItem = (e: React.FormEvent) => {
+      return {
+        ...item,
+        quantityDisplay: item.quantity || '—',
+        isExpiringSoon: expiration ? expiration <= sevenDaysFromNow : false
+      }
+    })
+
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement add item logic with proper dispatch
-    setShowAddForm(false)
-    setNewItem({ name: '', quantity: '', category: '', expirationDate: '' })
+
+    if (!newItem.name.trim() || !newItem.quantity.trim()) {
+      alert('Item name and quantity are required.')
+      return
+    }
+
+    try {
+      await pantryService.addItem({
+        name: newItem.name,
+        quantity: newItem.quantity,
+        category: newItem.category || undefined,
+        expirationDate: newItem.expirationDate || undefined
+      })
+      await loadPantryItems()
+      setShowAddForm(false)
+      setNewItem({ name: '', quantity: '', category: '', expirationDate: '' })
+    } catch (err) {
+      console.error('Error adding pantry item:', err)
+      alert('Failed to add pantry item. Please try again.')
+    }
+  }
+
+  const handleDeleteItem = async (id: string) => {
+    if (!confirm('Remove this pantry item?')) return
+
+    try {
+      await pantryService.deleteItem(id)
+      await loadPantryItems()
+    } catch (err) {
+      console.error('Error deleting pantry item:', err)
+      alert('Failed to delete pantry item. Please try again.')
+    }
   }
 
   if (isLoading) {
@@ -188,19 +234,23 @@ const PantryPage = () => {
                       <div className="text-sm font-medium text-gray-900 dark:text-white">{item.name}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-gray-300">{item.quantity}</div>
+                      <div className="text-sm text-gray-900 dark:text-gray-300">{item.quantityDisplay}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-gray-300">{item.category}</div>
+                      <div className="text-sm text-gray-900 dark:text-gray-300">{item.category || '—'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className={`text-sm ${item.isExpiringSoon ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-300'}`}>
-                        {item.expirationDate}
+                        {item.expirationDate || '—'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-3 dark:text-blue-400 dark:hover:text-blue-300">Edit</button>
-                      <button className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Delete</button>
+                      <button
+                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        onClick={() => handleDeleteItem(item.id)}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

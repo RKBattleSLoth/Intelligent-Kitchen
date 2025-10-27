@@ -1,6 +1,13 @@
-import { useState } from 'react'
-import { useSelector } from 'react-redux'
-import { RootState } from '../store'
+import { useState, useEffect } from 'react'
+
+interface StoredUserProfile {
+  firstName: string
+  lastName?: string
+  email?: string
+  dietaryPreferences?: string[]
+  allergies?: string[]
+  familySize?: number
+}
 
 const ProfilePage = () => {
   const [isEditing, setIsEditing] = useState(false)
@@ -12,7 +19,41 @@ const ProfilePage = () => {
     familySize: 1
   })
 
-  const { user } = useSelector((state: RootState) => state.auth)
+  const [profile, setProfile] = useState<StoredUserProfile>({
+    firstName: 'Chef',
+    lastName: '',
+    email: 'chef@example.com',
+    dietaryPreferences: [],
+    allergies: [],
+    familySize: 1
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('intelligent-kitchen-user')
+      if (stored) {
+        const parsed = JSON.parse(stored) as StoredUserProfile
+        const nextProfile: StoredUserProfile = {
+          firstName: parsed.firstName || 'Chef',
+          lastName: parsed.lastName || '',
+          email: parsed.email || 'chef@example.com',
+          dietaryPreferences: parsed.dietaryPreferences || [],
+          allergies: parsed.allergies || [],
+          familySize: parsed.familySize || 1
+        }
+        setProfile(nextProfile)
+        setFormData({
+          name: [nextProfile.firstName, nextProfile.lastName].filter(Boolean).join(' ').trim(),
+          email: nextProfile.email || '',
+          dietaryPreferences: [...(nextProfile.dietaryPreferences || [])],
+          allergies: [...(nextProfile.allergies || [])],
+          familySize: nextProfile.familySize || 1
+        })
+      }
+    } catch (error) {
+      console.warn('Failed to load profile from storage:', error)
+    }
+  }, [])
 
   const dietaryOptions = [
     'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 'Paleo', 'Low-Carb', 'Mediterranean'
@@ -23,7 +64,31 @@ const ProfilePage = () => {
   ]
 
   const handleSave = () => {
-    // TODO: Implement save logic
+    const trimmedName = formData.name.trim()
+    const [firstNameCandidate, ...rest] = trimmedName.length > 0 ? trimmedName.split(' ') : [profile.firstName]
+    const updatedProfile: StoredUserProfile = {
+      firstName: firstNameCandidate || profile.firstName || 'Chef',
+      lastName: rest.join(' ').trim(),
+      email: formData.email || profile.email,
+      dietaryPreferences: [...formData.dietaryPreferences],
+      allergies: [...formData.allergies],
+      familySize: formData.familySize || 1
+    }
+
+    try {
+      localStorage.setItem('intelligent-kitchen-user', JSON.stringify(updatedProfile))
+    } catch (error) {
+      console.warn('Failed to save profile to storage:', error)
+    }
+
+    setProfile(updatedProfile)
+    setFormData({
+      name: [updatedProfile.firstName, updatedProfile.lastName].filter(Boolean).join(' ').trim(),
+      email: updatedProfile.email || '',
+      dietaryPreferences: [...(updatedProfile.dietaryPreferences || [])],
+      allergies: [...(updatedProfile.allergies || [])],
+      familySize: updatedProfile.familySize || 1
+    })
     setIsEditing(false)
   }
 
@@ -54,7 +119,16 @@ const ProfilePage = () => {
         </div>
         {!isEditing && (
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={() => {
+              setFormData({
+                name: [profile.firstName, profile.lastName].filter(Boolean).join(' ').trim(),
+                email: profile.email || '',
+                dietaryPreferences: [...(profile.dietaryPreferences || [])],
+                allergies: [...(profile.allergies || [])],
+                familySize: profile.familySize || 1
+              })
+              setIsEditing(true)
+            }}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,8 +149,8 @@ const ProfilePage = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">{user?.firstName} {user?.lastName}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</p>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">{profile.firstName} {profile.lastName}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{profile.email}</p>
                 <div className="mt-4">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                     Active Member
@@ -104,7 +178,7 @@ const ProfilePage = () => {
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-blue-600 dark:focus:border-blue-600"
                       />
                     ) : (
-                      <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{user?.firstName} {user?.lastName}</div>
+                      <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{profile.firstName} {profile.lastName}</div>
                     )}
                   </div>
                   
@@ -118,7 +192,7 @@ const ProfilePage = () => {
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-blue-600 dark:focus:border-blue-600"
                       />
                     ) : (
-                      <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{user?.email}</div>
+                      <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{profile.email}</div>
                     )}
                   </div>
                 </div>
@@ -136,7 +210,7 @@ const ProfilePage = () => {
                       ))}
                     </select>
                   ) : (
-                    <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{formData.familySize} {formData.familySize === 1 ? 'person' : 'people'}</div>
+                    <div className="mt-1 text-sm text-gray-900 dark:text-gray-300">{profile.familySize || 1} {(profile.familySize || 1) === 1 ? 'person' : 'people'}</div>
                   )}
                 </div>
 
@@ -179,7 +253,16 @@ const ProfilePage = () => {
                 {isEditing && (
                   <div className="flex justify-end space-x-3">
                     <button
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => {
+                        setFormData({
+                          name: [profile.firstName, profile.lastName].filter(Boolean).join(' ').trim(),
+                          email: profile.email || '',
+                          dietaryPreferences: [...(profile.dietaryPreferences || [])],
+                          allergies: [...(profile.allergies || [])],
+                          familySize: profile.familySize || 1
+                        })
+                        setIsEditing(false)
+                      }}
                       className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                     >
                       Cancel

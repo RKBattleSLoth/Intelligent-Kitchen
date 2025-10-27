@@ -2,6 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { Recipe } from '../../types/recipe'
 import { recipeService } from '../../services/recipeService'
 
+export interface ShoppingListAddResult {
+  success: boolean
+  addedCount: number
+  message?: string
+  error?: string
+}
+
+interface ToastNotification {
+  type: 'success' | 'error' | 'info'
+  message: string
+  visible: boolean
+}
+
 interface RecipeViewModalProps {
   isOpen: boolean
   onClose: () => void
@@ -9,7 +22,7 @@ interface RecipeViewModalProps {
   isAIGenerated: boolean
   onSaveRecipe?: (recipe: Recipe) => void
   onReplaceMeal?: () => void
-  onAddToShoppingList?: () => Promise<void> | void
+  onAddToShoppingList?: () => Promise<ShoppingListAddResult>
 }
 
 export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
@@ -25,12 +38,29 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   const [editedRecipe, setEditedRecipe] = useState<Recipe | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingToList, setIsAddingToList] = useState(false)
+  const [toast, setToast] = useState<ToastNotification>({
+    type: 'info',
+    message: '',
+    visible: false
+  })
+
+  useEffect(() => {
+    if (!toast.visible) return undefined
+
+    const timer = window.setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }))
+    }, 3000)
+
+    return () => window.clearTimeout(timer)
+  }, [toast.visible])
 
   // Reset state when recipe changes
   useEffect(() => {
     setIsEditing(false)
     setEditedRecipe(null)
     setIsSaving(false)
+    setIsAddingToList(false)
+    setToast({ type: 'info', message: '', visible: false })
   }, [recipe])
 
   if (!isOpen || !recipe) return null
@@ -93,14 +123,33 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
         typeof ing === 'string' ? ing : `${ing.quantity || ''} ${ing.unit || ''} ${ing.name || ''}`.trim()
       ).filter(Boolean)
     : []
+  const ingredientCount = displayIngredients.length
 
   const handleAddToShoppingList = async () => {
     if (!onAddToShoppingList) return
     try {
       setIsAddingToList(true)
-      await onAddToShoppingList()
+      const result = await onAddToShoppingList()
+      if (result.success) {
+        setToast({
+          type: 'success',
+          message: result.message || `Added ${result.addedCount} ingredient${result.addedCount === 1 ? '' : 's'} to your shopping list`,
+          visible: true
+        })
+      } else {
+        setToast({
+          type: 'error',
+          message: result.error || 'Failed to add ingredients to the shopping list',
+          visible: true
+        })
+      }
     } catch (error) {
       console.error('Error adding ingredients to shopping list:', error)
+      setToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to add ingredients to the shopping list',
+        visible: true
+      })
     } finally {
       setIsAddingToList(false)
     }
@@ -133,6 +182,57 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
         overflow: 'auto'
       }
     }, [
+      React.createElement('style', {
+        key: 'animations'
+      }, `@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slideIn { from { transform: translateY(-1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`),
+      toast.visible && React.createElement('div', {
+        key: 'toast',
+        style: {
+          position: 'fixed',
+          top: '1.5rem',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1100,
+          minWidth: '280px',
+          maxWidth: '90%',
+          padding: '0.875rem 1.25rem',
+          background: toast.type === 'success' ? '#10b981' : toast.type === 'error' ? '#ef4444' : '#3b82f6',
+          color: 'white',
+          borderRadius: '0.5rem',
+          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.35)',
+          fontSize: '0.9375rem',
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          animation: 'slideIn 0.3s ease-out'
+        }
+      }, [
+        React.createElement('span', {
+          key: 'toast-icon',
+          style: { fontSize: '1.25rem' }
+        }, toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'),
+        React.createElement('span', {
+          key: 'toast-message',
+          style: { flex: 1 }
+        }, toast.message),
+        React.createElement('button', {
+          key: 'toast-close',
+          onClick: () => setToast(prev => ({ ...prev, visible: false })),
+          style: {
+            background: 'none',
+            border: 'none',
+            color: 'white',
+            fontSize: '1.25rem',
+            cursor: 'pointer',
+            lineHeight: 1,
+            padding: 0,
+            opacity: 0.8
+          }
+        }, '×')
+      ]),
       // Header
       React.createElement('div', {
         key: 'header',
@@ -323,51 +423,94 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
         ])
       ],
 
+      // Quick Actions
+      React.createElement('div', {
+        key: 'quick-actions',
+        style: {
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          marginTop: '1.5rem',
+          paddingTop: '1.5rem',
+          borderTop: '1px solid #334155'
+        }
+      }, [
+        onAddToShoppingList && React.createElement('button', {
+          key: 'add-to-shopping-list',
+          onClick: handleAddToShoppingList,
+          disabled: isAddingToList || ingredientCount === 0,
+          'aria-busy': isAddingToList,
+          'aria-disabled': isAddingToList || ingredientCount === 0,
+          style: {
+            flex: '1 1 220px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.875rem 1.5rem',
+            background: isAddingToList ? '#1e40af' : ingredientCount === 0 ? '#475569' : '#3b82f6',
+            color: 'white',
+            border: '1px solid #2563eb',
+            borderRadius: '0.5rem',
+            cursor: isAddingToList || ingredientCount === 0 ? 'not-allowed' : 'pointer',
+            fontWeight: 600,
+            fontSize: '0.9375rem',
+            opacity: isAddingToList || ingredientCount === 0 ? 0.8 : 1,
+            transition: 'all 0.2s ease',
+            boxShadow: isAddingToList || ingredientCount === 0 ? 'none' : '0 10px 20px rgba(37, 99, 235, 0.25)'
+          }
+        }, [
+          React.createElement('span', { key: 'icon', style: { fontSize: '1.1rem' } }, '🛒'),
+          React.createElement('span', { key: 'text' }, isAddingToList
+            ? 'Adding Ingredients...'
+            : ingredientCount === 0
+              ? 'No Ingredients Available'
+              : `Add ${ingredientCount} Ingredient${ingredientCount === 1 ? '' : 's'} to List`
+          ),
+          isAddingToList && React.createElement('span', {
+            key: 'spinner',
+            style: {
+              width: '1rem',
+              height: '1rem',
+              border: '2px solid rgba(255, 255, 255, 0.35)',
+              borderTopColor: '#fff',
+              borderRadius: '9999px',
+              animation: 'spin 0.6s linear infinite'
+            }
+          })
+        ]),
+        isAIGenerated && React.createElement('button', {
+          key: 'save-to-recipes',
+          onClick: handleSaveToRecipes,
+          disabled: isSaving,
+          style: {
+            flex: '1 1 220px',
+            padding: '0.875rem 1.5rem',
+            background: isSaving ? '#059669' : '#10b981',
+            color: 'white',
+            border: '1px solid #059669',
+            borderRadius: '0.5rem',
+            cursor: isSaving ? 'not-allowed' : 'pointer',
+            fontWeight: 600,
+            fontSize: '0.9375rem',
+            opacity: isSaving ? 0.75 : 1,
+            transition: 'all 0.2s ease'
+          }
+        }, isSaving ? 'Saving...' : '💾 Save to Recipes')
+      ]),
+
       // Action Buttons
       React.createElement('div', {
         key: 'actions',
         style: {
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
           marginTop: '2rem',
           paddingTop: '1.5rem',
           borderTop: '1px solid #334155'
         }
       }, [
-        React.createElement('div', { key: 'left-buttons' }, [
-          isAIGenerated && React.createElement('button', {
-            key: 'save-to-recipes',
-            onClick: handleSaveToRecipes,
-            disabled: isSaving,
-            style: {
-              padding: '0.75rem 1.5rem',
-              background: '#10b981',
-              color: 'white',
-              border: '1px solid #059669',
-              borderRadius: '0.375rem',
-              cursor: isSaving ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              marginRight: '0.75rem',
-              opacity: isSaving ? 0.7 : 1
-            }
-          }, isSaving ? 'Saving...' : '💾 Save to Recipes'),
-          onAddToShoppingList && React.createElement('button', {
-            key: 'add-to-shopping-list',
-            onClick: handleAddToShoppingList,
-            disabled: isAddingToList,
-            style: {
-              padding: '0.75rem 1.5rem',
-              background: '#3b82f6',
-              color: 'white',
-              border: '1px solid #2563eb',
-              borderRadius: '0.375rem',
-              cursor: isAddingToList ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isAddingToList ? 0.7 : 1
-            }
-          }, isAddingToList ? 'Adding...' : '🛒 Add to Shopping List')
-        ]),
         React.createElement('div', { key: 'right-buttons' }, [
           isEditing ? [
             React.createElement('button', {

@@ -1,16 +1,29 @@
-import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
-import { RootState } from '../store'
 import { aiService } from '../services/aiService'
 
 const DashboardPage = () => {
-  const { user } = useSelector((state: RootState) => state.auth)
+  const [userFirstName, setUserFirstName] = useState('Chef')
   const [aiStatus, setAiStatus] = useState<any>(null)
   const [aiEnabled, setAiEnabled] = useState(false)
 
   useEffect(() => {
+    loadUserProfile()
     checkAIStatus()
   }, [])
+
+  const loadUserProfile = () => {
+    try {
+      const stored = localStorage.getItem('intelligent-kitchen-user')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed && typeof parsed.firstName === 'string' && parsed.firstName.trim().length > 0) {
+          setUserFirstName(parsed.firstName.trim())
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load stored user profile:', error)
+    }
+  }
 
   const checkAIStatus = async () => {
     try {
@@ -28,7 +41,7 @@ const DashboardPage = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Welcome back, {user?.firstName}!</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Welcome back, {userFirstName}!</h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">Here's what's happening in your kitchen today.</p>
       </div>
 

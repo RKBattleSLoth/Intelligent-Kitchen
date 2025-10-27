@@ -279,8 +279,12 @@ class MealPlanService {
           category: normalizedMealType as any,
           instructions: instructionText,
           ingredients: meal.ingredients || [],
-          prepTime: meal.cookTime || 30,
-          cookTime: meal.cookTime || 30
+          prepTime: meal.prepTime || meal.cookTime || 30,
+          cookTime: meal.cookTime || 30,
+          servings: meal.servings || 4,
+          description: meal.description || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         }
         console.log(`syncAIMealPlan: Adding meal for ${meal.date} - ${normalizedMealType}: ${meal.name}`)
         this.addPlannedMeal(meal.date, normalizedMealType, recipe)

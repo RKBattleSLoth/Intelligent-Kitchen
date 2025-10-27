@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
-import { fetchRecipes, createRecipe, updateRecipe, deleteRecipe } from '../../store/slices/recipesSlice'
-import { RootState } from '../../store'
-import { RecipeViewModal } from '../../components/meal-planning/RecipeViewModal'
+import { useState, useEffect, useCallback } from 'react'
+import { RecipeViewModal, ShoppingListAddResult } from '../../components/meal-planning/RecipeViewModal'
 import { shoppingListService } from '../../services/shoppingListService'
 import { recipeService } from '../../services/recipeService'
+import { Recipe, RecipeCategory } from '../../types/recipe'
 
 const RecipesPage = () => {
-  const dispatch = useDispatch()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [showAddForm, setShowAddForm] = useState(false)
@@ -28,18 +25,54 @@ const RecipesPage = () => {
     ingredients: [{ id: '', name: '', quantity: 1, unit: 'pieces' }]
   })
 
-  const { recipes } = useSelector((state: RootState) => state.recipes)
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const loadRecipes = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setLoadError(null)
+      const allRecipes = await recipeService.getAllRecipes()
+      setRecipes(allRecipes)
+    } catch (error) {
+      console.error('Error loading recipes:', error)
+      setLoadError('Failed to load recipes. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    dispatch(fetchRecipes())
-  }, [dispatch])
+    loadRecipes()
+  }, [loadRecipes])
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesSearch = recipe.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (recipe.description && recipe.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesCategory = selectedCategory === 'all' || recipe.mealType === selectedCategory
+      (recipe.description && recipe.description.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    const recipeCategory = (recipe.mealType || recipe.category || 'Dinner').toString().toLowerCase()
+    const matchesCategory = selectedCategory === 'all' || recipeCategory === selectedCategory
     return matchesSearch && matchesCategory
   })
+
+  const mapToCategory = (value: string | undefined): RecipeCategory => {
+    const normalized = (value || 'Dinner').toLowerCase()
+    switch (normalized) {
+      case 'breakfast':
+        return 'Breakfast'
+      case 'lunch':
+        return 'Lunch'
+      case 'snack':
+        return 'Snack'
+      case 'dessert':
+        return 'Dessert'
+      case 'beverage':
+        return 'Beverage'
+      default:
+        return 'Dinner'
+    }
+  }
 
   const transformRecipeForModal = (recipeData: any) => {
     const formattedIngredients = Array.isArray(recipeData.ingredients)
@@ -58,21 +91,17 @@ const RecipesPage = () => {
         }).filter((line: string) => line.length > 0)
       : []
 
-    const capitalize = (value: string | undefined) => {
-      if (!value) return 'Dinner'
-      return value.charAt(0).toUpperCase() + value.slice(1)
-    }
-
     return {
       id: recipeData.id?.toString() || '',
       name: recipeData.name || 'Untitled Recipe',
-      category: capitalize(recipeData.meal_type) as any,
+      category: mapToCategory(recipeData.category || recipeData.mealType || recipeData.meal_type),
       instructions: recipeData.instructions || '',
       ingredients: formattedIngredients,
       prepTime: recipeData.prep_time ?? recipeData.prepTime ?? 30,
       cookTime: recipeData.cook_time ?? recipeData.cookTime ?? 30,
       servings: recipeData.servings ?? 4,
       difficulty: recipeData.difficulty || 'medium',
+      description: recipeData.description || '',
       createdAt: recipeData.created_at || new Date().toISOString(),
       updatedAt: recipeData.updated_at || new Date().toISOString()
     }
@@ -80,11 +109,12 @@ const RecipesPage = () => {
 
   const loadRecipeDetails = async (recipeId: string | number) => {
     const id = String(recipeId)
-    const response = await fetch(`/api/recipes/${id}`)
-    if (!response.ok) {
-      throw new Error('Failed to load recipe details')
+    const recipeData = await recipeService.getRecipeById(id)
+
+    if (!recipeData) {
+      throw new Error('Recipe not found')
     }
-    const recipeData = await response.json()
+
     return {
       formatted: transformRecipeForModal(recipeData),
       raw: recipeData
@@ -148,7 +178,7 @@ const RecipesPage = () => {
     }
   }
 
-  const handleAddRecipeIngredientsToShoppingList = async (recipeId: string | number) => {
+  const handleAddRecipeIngredientsToShoppingList = async (recipeId: string | number): Promise<ShoppingListAddResult> => {
     try {
       const recipeIdStr = String(recipeId)
 
@@ -163,20 +193,34 @@ const RecipesPage = () => {
 
       const ingredients = buildShoppingIngredientsFromRecipe(recipeData)
       if (!ingredients.length) {
-        alert('No ingredients found for this recipe.')
-        return
+        return {
+          success: false,
+          addedCount: 0,
+          error: 'No ingredients found for this recipe.'
+        }
       }
 
       const addedItems = await shoppingListService.addIngredientsToList(ingredients)
       if (!addedItems.length) {
-        alert('No ingredients were added to the shopping list.')
-        return
+        return {
+          success: false,
+          addedCount: 0,
+          error: 'No ingredients were added to the shopping list.'
+        }
       }
 
-      alert(`Added ${addedItems.length} ingredient${addedItems.length === 1 ? '' : 's'} to your shopping list.`)
+      return {
+        success: true,
+        addedCount: addedItems.length,
+        message: `Added ${addedItems.length} ingredient${addedItems.length === 1 ? '' : 's'} to your shopping list.`
+      }
     } catch (error) {
       console.error('Error adding recipe ingredients to shopping list:', error)
-      alert('Failed to add ingredients to shopping list.')
+      return {
+        success: false,
+        addedCount: 0,
+        error: error instanceof Error ? error.message : 'Failed to add ingredients to shopping list.'
+      }
     }
   }
 
@@ -203,35 +247,42 @@ const RecipesPage = () => {
     }))
   }
 
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validation
+
     if (!newRecipe.name.trim() || !newRecipe.instructions.trim()) {
       alert('Recipe name and instructions are required')
       return
     }
-    
+
     if (newRecipe.ingredients.length === 0 || newRecipe.ingredients.every(ing => !ing.name.trim())) {
       alert('At least one ingredient is required')
       return
     }
-    
+
     try {
       const recipeData = {
-        ...newRecipe,
+        name: newRecipe.name,
+        instructions: newRecipe.instructions,
+        category: mapToCategory(newRecipe.mealType),
+        description: newRecipe.description,
         prepTime: parseInt(newRecipe.prepTime) || 0,
         cookTime: parseInt(newRecipe.cookTime) || 0,
         servings: parseInt(newRecipe.servings) || 1,
+        difficulty: newRecipe.difficulty,
+        mealType: newRecipe.mealType,
+        isPublic: newRecipe.isPublic,
         ingredients: newRecipe.ingredients
           .filter(ing => ing.name.trim() !== '')
           .map(ing => ({
-            ...ing,
-            quantity: parseFloat(ing.quantity.toString()) || 0
+            name: ing.name,
+            quantity: parseFloat(ing.quantity.toString()) || 0,
+            unit: ing.unit
           }))
       }
-      
-      await dispatch(createRecipe(recipeData) as any)
+
+      await recipeService.createRecipe(recipeData)
+      await loadRecipes()
       setShowAddForm(false)
       setNewRecipe({
         name: '',
@@ -252,15 +303,17 @@ const handleSubmit = async (e: React.FormEvent) => {
   }
 
   const handleEditRecipe = (recipe: any) => {
-    // Transform API data to match form structure
     const transformedRecipe = {
       ...recipe,
-      prepTime: recipe.prep_time || 0,
-      cookTime: recipe.cook_time || 0,
-      mealType: recipe.meal_type || 'dinner',
-      isPublic: recipe.is_public || false,
-      ingredients: recipe.ingredients || [{ id: '', name: '', quantity: 1, unit: 'pieces' }],
-      instructions: recipe.instructions || ''
+      prepTime: recipe.prepTime ?? recipe.prep_time ?? 0,
+      cookTime: recipe.cookTime ?? recipe.cook_time ?? 0,
+      mealType: (recipe.mealType || recipe.category || 'Dinner').toString().toLowerCase(),
+      isPublic: recipe.isPublic ?? recipe.is_public ?? false,
+      ingredients: Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0
+        ? recipe.ingredients
+        : [{ id: '', name: '', quantity: 1, unit: 'pieces' }],
+      instructions: recipe.instructions || '',
+      description: recipe.description || ''
     }
     setEditingRecipe(transformedRecipe)
     setShowEditForm(true)
@@ -288,12 +341,13 @@ const handleSubmit = async (e: React.FormEvent) => {
         name: editingRecipe.name,
         description: editingRecipe.description || '',
         instructions: editingRecipe.instructions || '',
-        prep_time: parseInt(editingRecipe.prepTime) || 0,
-        cook_time: parseInt(editingRecipe.cookTime) || 0,
+        category: mapToCategory(editingRecipe.mealType),
+        prepTime: parseInt(editingRecipe.prepTime) || 0,
+        cookTime: parseInt(editingRecipe.cookTime) || 0,
         servings: parseInt(editingRecipe.servings) || 1,
         difficulty: editingRecipe.difficulty || 'medium',
-        meal_type: editingRecipe.mealType || 'dinner',
-        is_public: editingRecipe.isPublic || false,
+        mealType: editingRecipe.mealType,
+        isPublic: editingRecipe.isPublic || false,
         ingredients: ingredients
           .filter((ing: any) => ing.name.trim() !== '')
           .map((ing: any) => ({
@@ -302,8 +356,9 @@ const handleSubmit = async (e: React.FormEvent) => {
             unit: ing.unit || 'pieces'
           }))
       }
-      
-      await dispatch(updateRecipe({ id: editingRecipe.id, recipeData } as any))
+
+      await recipeService.updateRecipe(editingRecipe.id, recipeData)
+      await loadRecipes()
       setShowEditForm(false)
       setEditingRecipe(null)
     } catch (error) {
@@ -316,14 +371,15 @@ const handleSubmit = async (e: React.FormEvent) => {
     if (!confirm('Are you sure you want to delete this recipe?')) return
     
     try {
-      await dispatch(deleteRecipe(recipeId) as any)
+      await recipeService.deleteRecipe(recipeId)
+      await loadRecipes()
     } catch (error) {
       console.error('Error deleting recipe:', error)
       alert('Failed to delete recipe')
     }
   }
 
-  const categories = ['all', 'breakfast', 'lunch', 'dinner', 'dessert', 'snack']
+  const categories = ['all', 'breakfast', 'lunch', 'dinner', 'dessert', 'snack', 'beverage']
   
   const validUnits = [
     'pieces', 'cups', 'tablespoons', 'teaspoons', 'grams', 'kilograms', 
@@ -349,6 +405,16 @@ const handleSubmit = async (e: React.FormEvent) => {
       </div>
 
       <div className="bg-white shadow rounded-lg p-6 dark:bg-dark-800 dark:border-gray-700">
+        {loadError && (
+          <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200">
+            {loadError}
+          </div>
+        )}
+        {isLoading && (
+          <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+            Loading recipes...
+          </div>
+        )}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="flex-1 relative">
             <input
@@ -386,20 +452,26 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </svg>
               </div>
               <div className="p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 dark:text-white">{recipe.name}</h3>
-                <p className="text-gray-600 text-sm mb-3 dark:text-gray-400">{recipe.description}</p>
+                <h3
+                  className="text-lg font-semibold text-gray-900 mb-2 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  onClick={() => handleViewRecipe(recipe.id)}
+                  style={{ textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+                >
+                  {recipe.name}
+                </h3>
+                <p className="text-gray-600 text-sm mb-3 dark:text-gray-400">{recipe.description || 'No description provided.'}</p>
                 <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
                   <span className="flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    {recipe.cookTime} min
+                    {recipe.cookTime ?? '—'} min
                   </span>
                   <span className="flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    {recipe.servings} servings
+                    {recipe.servings ?? '—'} servings
                   </span>
                 </div>
                 <div className="mt-3 flex space-x-2">
@@ -410,7 +482,14 @@ const handleSubmit = async (e: React.FormEvent) => {
                     View Recipe
                   </button>
                   <button 
-                    onClick={() => handleAddRecipeIngredientsToShoppingList(recipe.id)}
+                    onClick={async () => {
+                      const result = await handleAddRecipeIngredientsToShoppingList(recipe.id)
+                      if (result.success && result.message) {
+                        alert(result.message)
+                      } else if (result.error) {
+                        alert(result.error)
+                      }
+                    }}
                     className="px-3 py-2 border border-green-300 rounded-md text-sm font-medium text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-300 dark:hover:bg-green-900/20"
                     title="Add ingredients to shopping list"
                   >
