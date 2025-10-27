@@ -286,7 +286,8 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
       style: {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: '1.5rem'
+        gap: '1.5rem',
+        alignItems: 'stretch'
       }
     }, 
       filteredRecipes.length === 0 
@@ -331,7 +332,10 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                 border: '1px solid #334155',
                 overflow: 'hidden',
-                transition: 'transform 0.2s, box-shadow 0.2s'
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%'
               }
             }, [
               // Recipe header
@@ -339,7 +343,8 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 key: 'recipe-header',
                 style: {
                   padding: '1rem',
-                  borderBottom: '1px solid #334155'
+                  borderBottom: '1px solid #334155',
+                  flexShrink: 0
                 }
               }, [
                 React.createElement('div', {
@@ -358,6 +363,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 React.createElement('h3', {
                   key: 'recipe-name',
                   onClick: () => handleViewRecipe(recipe),
+                  title: recipe.name,
                   style: {
                     fontSize: '1.125rem',
                     fontWeight: 'bold',
@@ -366,11 +372,15 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                     cursor: 'pointer',
                     textDecoration: 'underline',
                     textDecorationStyle: 'dotted',
-                    transition: 'color 0.2s'
+                    transition: 'color 0.2s',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'block'
                   },
                   onMouseEnter: (e) => { e.currentTarget.style.color = '#93c5fd' },
                   onMouseLeave: (e) => { e.currentTarget.style.color = '#60a5fa' }
-                }, recipe.name)
+                }, recipe.name.length > 100 ? recipe.name.substring(0, 100) + '...' : recipe.name)
               ]),
 
               // Recipe preview
@@ -379,7 +389,8 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 style: {
                   padding: '1rem',
                   maxHeight: '150px',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  flex: 1
                 }
               }, [
                 React.createElement('p', {
@@ -404,7 +415,8 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                   borderTop: '1px solid #334155',
                   display: 'flex',
                   gap: '0.5rem',
-                  justifyContent: 'flex-end'
+                  justifyContent: 'flex-end',
+                  flexShrink: 0
                 }
               }, [
                 React.createElement('button', {
