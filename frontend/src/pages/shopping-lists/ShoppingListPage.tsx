@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { shoppingListService } from '../../services/shoppingListService';
-import { aiService, IngredientExtractionResult } from '../../services/aiService';
+import { aiService } from '../../services/aiService';
 import { recipeService } from '../../services/recipeService';
 import { ShoppingListItem } from '../../types/shoppingList';
 import { Recipe } from '../../types/recipe';
@@ -151,6 +151,34 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }
   };
 
+  // Helper function to extract ingredients from recipe - matching RecipeList logic
+  const extractIngredientsForShopping = (recipe: Recipe): Array<string | {
+    text?: string
+    quantity?: string | number | null
+    unit?: string | null
+    name?: string | null
+  }> => {
+    if (!recipe) return []
+
+    if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+      return recipe.ingredients
+    }
+
+    if (typeof recipe.instructions === 'string' && recipe.instructions.trim()) {
+      const parsed = recipeService.parseInstructions(recipe.instructions)
+      if (parsed.items.length > 0) {
+        return parsed.items.map(item => ({
+          text: item.text,
+          quantity: item.quantity ?? item.quantityValue ?? null,
+          unit: item.unit ?? null,
+          name: item.name ?? null
+        }))
+      }
+    }
+
+    return []
+  }
+
   // AI Functions
   const addRecipeIngredients = async (recipeId: string) => {
     try {
@@ -162,71 +190,22 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         setError('Recipe not found');
         return;
       }
-      
-      const parseResult = recipeService.parseInstructions(recipe.instructions);
-      const highConfidence = parseResult.confidence >= 0.5 && parseResult.items.length > 0;
 
-      const response: IngredientExtractionResult = await aiService.extractIngredientsFromRecipe({
-        id: recipe.id,
-        name: recipe.name,
-        instructions: recipe.instructions,
-        parsedIngredients: highConfidence ? parseResult.items : undefined,
-        parseConfidence: parseResult.confidence
-      });
-
-      const ingredientsToAdd = response.success && response.ingredients.length > 0
-        ? response.ingredients
-        : parseResult.items.map(item => ({
-            name: item.name,
-            quantity: item.quantityValue ?? item.quantity ?? null,
-            amount: item.quantity ?? null,
-            unit: item.unit ?? null,
-            category: item.category ?? 'other',
-            preparation: item.preparation ?? null,
-            notes: item.notes ?? null
-          }));
-
-      if (!ingredientsToAdd.length) {
-        setError(response.error || 'No ingredients found in recipe');
+      // Use the same extraction logic as RecipeList
+      const ingredients = extractIngredientsForShopping(recipe);
+      if (!ingredients.length) {
+        setError('No ingredients found in this recipe');
         return;
       }
 
-      const newItems: ShoppingListItem[] = [];
-      for (const ingredient of ingredientsToAdd) {
-        const quantityText = typeof ingredient.amount === 'string'
-          ? ingredient.amount
-          : (ingredient.quantity !== null && ingredient.quantity !== undefined
-              ? ingredient.quantity.toString()
-              : null);
-        const formatted = [quantityText, ingredient.unit, ingredient.name]
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-
-        const ingredientName = ingredient.name?.trim();
-        if (!ingredientName) {
-          continue;
-        }
-
-        const normalizedName = ingredientName.toLowerCase();
-        if (['ingredients', 'instructions', 'directions'].includes(normalizedName)) {
-          continue;
-        }
-
-        try {
-          const newItem = await shoppingListService.addShoppingListItem({
-            text: formatted || ingredientName,
-            quantity: quantityText,
-            unit: ingredient.unit || null,
-            name: ingredientName
-          });
-          newItems.push(newItem);
-        } catch (err) {
-          console.error('Failed to add ingredient:', err);
-        }
+      // Add ingredients using the shopping list service
+      const addedItems = await shoppingListService.addIngredientsToList(ingredients);
+      if (!addedItems || addedItems.length === 0) {
+        setError('No ingredients were added to the shopping list');
+        return;
       }
 
-      setItems([...items, ...newItems]);
+      setItems([...items, ...addedItems]);
       setSelectedRecipes(selectedRecipes.filter(id => id !== recipeId));
     } catch (err: any) {
       setError(err.message || 'Failed to add recipe ingredients');

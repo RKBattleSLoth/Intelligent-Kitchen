@@ -45,17 +45,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           }, 'Dashboard'),
           React.createElement(Link, {
-            key: 'pantry',
-            to: '/pantry',
-            style: {
-              color: location.pathname === '/pantry' ? '#60a5fa' : 'white',
-              textDecoration: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.25rem',
-              background: location.pathname === '/pantry' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
-            }
-          }, 'Pantry'),
-          React.createElement(Link, {
             key: 'recipes',
             to: '/recipes',
             style: {
@@ -119,21 +108,6 @@ const Dashboard = () => React.createElement('div', null, [
       marginBottom: '2rem'
     }
   }, [
-    React.createElement('div', {
-      key: 'stat1',
-      style: {
-        background: '#1e293b',
-        padding: '1.5rem',
-        borderRadius: '0.5rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        border: '1px solid #334155'
-      }
-    }, [
-      React.createElement('div', { key: 'icon1', style: { fontSize: '2rem', marginBottom: '0.5rem' } }, '🥫'),
-      React.createElement('h3', { key: 'title1', style: { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#f1f5f9' } }, 'Pantry Items'),
-      React.createElement('p', { key: 'value1', style: { color: '#60a5fa', fontSize: '2rem', fontWeight: 'bold' } }, '24'),
-      React.createElement('p', { key: 'change1', style: { color: '#10b981', fontSize: '0.875rem' } }, '+3 from last week')
-    ]),
     React.createElement('div', {
       key: 'stat2',
       style: {
@@ -227,17 +201,6 @@ function App() {
       key: 'home',
       path: '/',
       element: React.createElement(Layout, null, React.createElement(Dashboard))
-    }),
-    React.createElement(Route, {
-      key: 'pantry',
-      path: '/pantry',
-      element: React.createElement(Layout, null, 
-        React.createElement(PlaceholderPage, {
-          title: 'Pantry Management',
-          description: 'Track your kitchen inventory and get notified when items are running low.',
-          emoji: '🥫'
-        })
-      )
     }),
     React.createElement(Route, {
       key: 'recipes',
