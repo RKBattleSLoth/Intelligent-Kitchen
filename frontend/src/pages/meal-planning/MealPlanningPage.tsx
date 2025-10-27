@@ -1159,9 +1159,13 @@ export const MealPlanningPage: React.FC = () => {
                   marginBottom: '0.25rem',
                   cursor: 'pointer',
                   textDecoration: 'underline',
-                  textDecorationStyle: 'dotted'
-                }
-              }, plannedMeal.recipe.name),
+                  textDecorationStyle: 'dotted',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                },
+                title: plannedMeal.recipe.name
+              }, plannedMeal.recipe.name.length > 100 ? plannedMeal.recipe.name.substring(0, 100) + '...' : plannedMeal.recipe.name),
               React.createElement('div', {
                 key: 'actions',
                 style: {
