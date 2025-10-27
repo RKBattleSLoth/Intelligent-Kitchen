@@ -6,7 +6,7 @@ import { recipeService } from '../../services/recipeService'
 import { shoppingListService } from '../../services/shoppingListService'
 import { RecipeForm } from '../../components/recipes/RecipeForm'
 import { SmartMealPlannerModal } from '../../components/meal-planning/SmartMealPlannerModal'
-import { RecipeViewModal } from '../../components/meal-planning/RecipeViewModal'
+import { RecipeViewModal, ShoppingListAddResult } from '../../components/meal-planning/RecipeViewModal'
 
 interface RecipeSelectionModalProps {
   isOpen: boolean
@@ -234,6 +234,25 @@ export const MealPlanningPage: React.FC = () => {
   const [viewingRecipe, setViewingRecipe] = useState<{ recipe: Recipe; date: string; mealSlot: MealSlot } | null>(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearAction, setClearAction] = useState<string | null>(null)
+  const [isSelectingDays, setIsSelectingDays] = useState(false)
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
+
+  const toggleDaySelection = (date: string) => {
+    setSelectedDates(prev => {
+      const next = new Set(prev)
+      if (next.has(date)) {
+        next.delete(date)
+      } else {
+        next.add(date)
+      }
+      return next
+    })
+  }
+
+  const resetDaySelection = () => {
+    setSelectedDates(new Set())
+    setIsSelectingDays(false)
+  }
 
   const extractIngredientsForShopping = (recipe: any): Array<string | {
     text?: string
@@ -262,36 +281,56 @@ export const MealPlanningPage: React.FC = () => {
     return []
   }
 
-  const addIngredientsGroupToShoppingList = async (ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }>, contextLabel: string) => {
+  const addIngredientsGroupToShoppingList = async (
+    ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> | undefined,
+    contextLabel: string
+  ): Promise<ShoppingListAddResult> => {
     if (!ingredients || ingredients.length === 0) {
-      alert(`No ingredients found ${contextLabel}.`)
-      return
+      return {
+        success: false,
+        addedCount: 0,
+        error: `No ingredients found ${contextLabel}.`
+      }
     }
 
     try {
       const addedItems = await shoppingListService.addIngredientsToList(ingredients)
       if (!addedItems || addedItems.length === 0) {
-        alert(`No ingredients were added ${contextLabel}.`)
-        return
+        return {
+          success: false,
+          addedCount: 0,
+          error: `No ingredients were added ${contextLabel}.`
+        }
       }
 
-      alert(`Added ${addedItems.length} item${addedItems.length === 1 ? '' : 's'} to your shopping list ${contextLabel}.`)
+      return {
+        success: true,
+        addedCount: addedItems.length,
+        message: `Added ${addedItems.length} item${addedItems.length === 1 ? '' : 's'} to your shopping list ${contextLabel}.`
+      }
     } catch (error) {
       console.error('Error adding ingredients to shopping list:', error)
-      alert('Failed to add ingredients to shopping list. Please try again.')
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'Failed to add ingredients to shopping list. Please try again.'
+      }
     }
   }
 
-  const handleAddRecipeIngredientsToShoppingList = async (recipe: Recipe) => {
+  const handleAddRecipeIngredientsToShoppingList = async (recipe: Recipe): Promise<ShoppingListAddResult> => {
     const ingredients = extractIngredientsForShopping(recipe as any)
-    await addIngredientsGroupToShoppingList(ingredients, `from "${recipe.name}"`)
+    return addIngredientsGroupToShoppingList(ingredients, `from "${recipe.name}"`)
   }
 
-  const handleAddDayToShoppingList = async (date: string) => {
+  const handleAddDayToShoppingList = async (date: string): Promise<ShoppingListAddResult> => {
     const mealsForDate = Object.values(plannedMeals).filter(meal => meal.date === date)
     if (mealsForDate.length === 0) {
-      alert('No meals planned for this day.')
-      return
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'No meals planned for this day.'
+      }
     }
 
     const ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> = []
@@ -300,17 +339,20 @@ export const MealPlanningPage: React.FC = () => {
     })
 
     const friendlyDate = new Date(`${date}T00:00:00`).toLocaleDateString()
-    await addIngredientsGroupToShoppingList(ingredients, `for ${friendlyDate}`)
+    return addIngredientsGroupToShoppingList(ingredients, `for ${friendlyDate}`)
   }
 
-  const handleAddWeekToShoppingList = async () => {
+  const handleAddWeekToShoppingList = async (): Promise<ShoppingListAddResult> => {
     const weekDateKeys = getWeekDates().map(date => date.toISOString().split('T')[0])
     const weekDateSet = new Set(weekDateKeys)
     const weekMeals = Object.values(plannedMeals).filter(meal => weekDateSet.has(meal.date))
 
     if (weekMeals.length === 0) {
-      alert('No meals planned for this week.')
-      return
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'No meals planned for this week.'
+      }
     }
 
     const ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> = []
@@ -318,7 +360,43 @@ export const MealPlanningPage: React.FC = () => {
       ingredients.push(...extractIngredientsForShopping(meal.recipe as any))
     })
 
-    await addIngredientsGroupToShoppingList(ingredients, 'for this week')
+    return addIngredientsGroupToShoppingList(ingredients, 'for this week')
+  }
+
+  const handleAddSelectedDaysToShoppingList = async (): Promise<ShoppingListAddResult> => {
+    if (selectedDates.size === 0) {
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'No days selected.'
+      }
+    }
+
+    const sortedDates = Array.from(selectedDates).sort()
+    const selectedMeals = Object.values(plannedMeals).filter(meal => selectedDates.has(meal.date))
+
+    if (selectedMeals.length === 0) {
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'No meals planned for the selected days.'
+      }
+    }
+
+    const ingredients: Array<string | { text?: string; quantity?: string | number | null; unit?: string | null; name?: string | null }> = []
+    selectedMeals.forEach(meal => {
+      ingredients.push(...extractIngredientsForShopping(meal.recipe as any))
+    })
+
+    const friendlyLabel = sortedDates
+      .map(date => new Date(`${date}T00:00:00`).toLocaleDateString())
+      .join(', ')
+
+    const result = await addIngredientsGroupToShoppingList(ingredients, `for ${friendlyLabel}`)
+    if (result.success) {
+      resetDaySelection()
+    }
+    return result
   }
 
   useEffect(() => {
@@ -359,7 +437,11 @@ export const MealPlanningPage: React.FC = () => {
     mealPlanService.updateFilters(newFilters)
   }
 
-  const handleMealSlotClick = (date: string, mealSlot: MealSlot) => {
+  const handleMealSlotClick = (date: string, mealSlot: MealSlot, e?: React.MouseEvent) => {
+    if (isSelectingDays) {
+      e?.preventDefault()
+      return
+    }
     setSelectedSlot({ date, mealSlot })
     setShowRecipeModal(true)
   }
@@ -414,6 +496,7 @@ export const MealPlanningPage: React.FC = () => {
 
   // Handle clicking on meal card area (change recipe)
   const handleMealCardClick = (date: string, mealSlot: MealSlot, e: React.MouseEvent) => {
+    if (isSelectingDays) return
     // Check if the click was on the recipe name or remove button
     if ((e.target as HTMLElement).closest('.recipe-name') || 
         (e.target as HTMLElement).closest('.remove-button')) {
@@ -526,11 +609,19 @@ export const MealPlanningPage: React.FC = () => {
 
   // Drag and Drop handlers
   const handleDragStart = (e: React.DragEvent, date: string, mealSlot: MealSlot, meal: PlannedMeal) => {
+    if (isSelectingDays) {
+      e.preventDefault()
+      return
+    }
     setDraggedMeal({ date, mealSlot, meal })
     e.dataTransfer.effectAllowed = 'move'
   }
 
   const handleDragOver = (e: React.DragEvent, date: string, mealSlot: MealSlot) => {
+    if (isSelectingDays) {
+      e.preventDefault()
+      return
+    }
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOverSlot({ date, mealSlot })
@@ -541,6 +632,10 @@ export const MealPlanningPage: React.FC = () => {
   }
 
   const handleDrop = (e: React.DragEvent, targetDate: string, targetMealSlot: MealSlot) => {
+    if (isSelectingDays) {
+      e.preventDefault()
+      return
+    }
     e.preventDefault()
     setDragOverSlot(null)
 
@@ -645,156 +740,186 @@ export const MealPlanningPage: React.FC = () => {
       key: 'header',
       style: {
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '2rem',
-        flexWrap: 'wrap',
-        gap: '1rem'
+        flexDirection: 'column',
+        gap: '1.5rem',
+        marginBottom: '2rem'
       }
     }, [
-      React.createElement('h1', {
-        key: 'title',
-        style: { fontSize: '2rem', fontWeight: 'bold', color: '#f1f5f9' }
-      }, '📅 Meal Planning'),
-      
-      // Left navigation buttons
+      // Top row: Title and navigation
       React.createElement('div', {
-        key: 'navigation-left',
-        style: { display: 'flex', gap: '1rem', alignItems: 'center' }
+        key: 'header-top',
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap'
+        }
       }, [
-        React.createElement('button', {
-          key: 'prev',
-          onClick: () => {
-            const newDate = new Date(currentDate)
-            newDate.setDate(newDate.getDate() - 7)
-            setCurrentDate(newDate)
-          },
-          style: {
-            padding: '0.5rem 1rem',
-            background: '#374151',
-            color: '#f1f5f9',
-            border: '1px solid #4b5563',
-            borderRadius: '0.375rem',
-            cursor: 'pointer'
-          }
-        }, '← Previous'),
-        React.createElement('span', {
-          key: 'current-week',
-          style: { 
-            color: '#f1f5f9', 
-            fontWeight: 'bold',
-            minWidth: '200px',
-            textAlign: 'center'
-          }
-        }, `Week of ${weekDates[0].toLocaleDateString()}`),
-        React.createElement('button', {
-          key: 'next',
-          onClick: () => {
-            const newDate = new Date(currentDate)
-            newDate.setDate(newDate.getDate() + 7)
-            setCurrentDate(newDate)
-          },
-          style: {
-            padding: '0.5rem 1rem',
-            background: '#374151',
-            color: '#f1f5f9',
-            border: '1px solid #4b5563',
-            borderRadius: '0.375rem',
-            cursor: 'pointer'
-          }
-        }, 'Next →')
+        React.createElement('h1', {
+          key: 'title',
+          style: { fontSize: '2rem', fontWeight: 'bold', color: '#f1f5f9' }
+        }, '📅 Meal Planning'),
+        
+        // Week navigation
+        React.createElement('div', {
+          key: 'week-navigation',
+          style: { display: 'flex', gap: '1rem', alignItems: 'center' }
+        }, [
+          React.createElement('button', {
+            key: 'prev',
+            onClick: () => {
+              const newDate = new Date(currentDate)
+              newDate.setDate(newDate.getDate() - 7)
+              setCurrentDate(newDate)
+            },
+            style: {
+              padding: '0.5rem 1rem',
+              background: '#374151',
+              color: '#f1f5f9',
+              border: '1px solid #4b5563',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.95rem'
+            }
+          }, '← Previous'),
+          React.createElement('span', {
+            key: 'current-week',
+            style: { 
+              color: '#f1f5f9', 
+              fontWeight: 'bold',
+              minWidth: '180px',
+              textAlign: 'center',
+              fontSize: '0.95rem'
+            }
+          }, `Week of ${weekDates[0].toLocaleDateString()}`),
+          React.createElement('button', {
+            key: 'next',
+            onClick: () => {
+              const newDate = new Date(currentDate)
+              newDate.setDate(newDate.getDate() + 7)
+              setCurrentDate(newDate)
+            },
+            style: {
+              padding: '0.5rem 1rem',
+              background: '#374151',
+              color: '#f1f5f9',
+              border: '1px solid #4b5563',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.95rem'
+            }
+          }, 'Next →')
+        ])
       ]),
       
-      // Center buttons
+      // Bottom row: All action buttons
       React.createElement('div', {
-        key: 'center-buttons',
-        style: { display: 'flex', gap: '0.5rem', alignItems: 'center' }
+        key: 'header-bottom',
+        style: {
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }
       }, [
         React.createElement('button', {
           key: 'smart-planner',
           onClick: () => setShowSmartPlanner(true),
           style: {
-            padding: '0.5rem 1rem',
+            padding: '0.6rem 1.25rem',
             background: '#10b981',
             color: 'white',
             border: '1px solid #059669',
             borderRadius: '0.375rem',
             cursor: 'pointer',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            whiteSpace: 'nowrap'
           }
         }, '🤖 Smart Meal Plan'),
         React.createElement('button', {
           key: 'add-week-shopping',
-          onClick: handleAddWeekToShoppingList,
+          onClick: async () => {
+            const result = await handleAddWeekToShoppingList()
+            if (result.success && result.message) {
+              alert(result.message)
+            } else if (result.error) {
+              alert(result.error)
+            }
+          },
           style: {
-            padding: '0.5rem 1rem',
+            padding: '0.6rem 1.25rem',
             background: '#3b82f6',
             color: 'white',
             border: '1px solid #2563eb',
             borderRadius: '0.375rem',
             cursor: 'pointer',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            whiteSpace: 'nowrap'
           }
-        }, '🛒 Add Week to Shopping List')
-      ]),
-      
-      // Right clear buttons
-      React.createElement('div', {
-        key: 'clear-buttons',
-        style: { display: 'flex', gap: '0.5rem', alignItems: 'center' }
-      }, [
-        React.createElement('div', {
-          key: 'clear-dropdown',
-          style: { position: 'relative', display: 'inline-block' }
-        }, [
-          React.createElement('button', {
-            key: 'clear-main',
-            onClick: () => handleClearConfirm('week'),
-            style: {
-              padding: '0.5rem 1rem',
-              background: '#dc2626',
-              color: 'white',
-              border: '1px solid #b91c1c',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              marginRight: '0.5rem'
+        }, '🛒 Add Week to Shopping'),
+        React.createElement('button', {
+          key: 'toggle-day-selection',
+          onClick: () => {
+            if (isSelectingDays) {
+              resetDaySelection()
+            } else {
+              setIsSelectingDays(true)
             }
-          }, '🗑️ Clear Week'),
-          
-          // Additional clear options (you can uncomment these if desired)
-          /*
-          React.createElement('button', {
-            key: 'clear-all',
-            onClick: () => handleClearConfirm('all'),
-            style: {
-              padding: '0.5rem 0.75rem',
-              background: '#ef4444',
-              color: 'white',
-              border: '1px solid #dc2626',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
-            },
-            title: 'Clear all meal plans'
-          }, 'All'),
-          
-          React.createElement('button', {
-            key: 'clear-ai',
-            onClick: handleClearAIRecipes,
-            style: {
-              padding: '0.5rem 0.75rem',
-              background: '#f97316',
-              color: 'white',
-              border: '1px solid #ea580c',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
-            },
-            title: 'Clear AI-generated recipes only'
-          }, 'AI')
-          */
-        ])
+          },
+          style: {
+            padding: '0.6rem 1.25rem',
+            background: isSelectingDays ? '#f97316' : '#0ea5e9',
+            color: 'white',
+            border: `1px solid ${isSelectingDays ? '#ea580c' : '#0284c7'}`,
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            whiteSpace: 'nowrap'
+          }
+        }, isSelectingDays ? '✅ Done' : '🗓️ Select Days'),
+        isSelectingDays && React.createElement('button', {
+          key: 'add-selected-days',
+          onClick: async () => {
+            const result = await handleAddSelectedDaysToShoppingList()
+            if (result.success && result.message) {
+              alert(result.message)
+            } else if (result.error) {
+              alert(result.error)
+            }
+          },
+          disabled: selectedDates.size === 0,
+          style: {
+            padding: '0.6rem 1.25rem',
+            background: selectedDates.size === 0 ? '#475569' : '#6366f1',
+            color: 'white',
+            border: '1px solid #4c51bf',
+            borderRadius: '0.375rem',
+            cursor: selectedDates.size === 0 ? 'not-allowed' : 'pointer',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            opacity: selectedDates.size === 0 ? 0.7 : 1,
+            whiteSpace: 'nowrap'
+          }
+        }, `Add (${selectedDates.size})`),
+        React.createElement('button', {
+          key: 'clear-main',
+          onClick: () => handleClearConfirm('week'),
+          style: {
+            padding: '0.6rem 1.25rem',
+            background: '#dc2626',
+            color: 'white',
+            border: '1px solid #b91c1c',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '0.9rem',
+            whiteSpace: 'nowrap'
+          }
+        }, '🗑️ Clear Week')
       ])
     ]),
 
@@ -852,36 +977,69 @@ export const MealPlanningPage: React.FC = () => {
       // Day headers
       ...weekDates.map(date => {
         const dateStr = date.toISOString().split('T')[0]
+        const isSelected = selectedDates.has(dateStr)
         return React.createElement('div', {
           key: `header-${date.toISOString()}`,
+          onClick: isSelectingDays ? () => toggleDaySelection(dateStr) : undefined,
           style: {
             textAlign: 'center',
             padding: '0.75rem 0.5rem 0.5rem',
-            background: '#1e293b',
-            border: '1px solid #334155',
+            background: isSelected ? 'rgba(251, 191, 36, 0.18)' : '#1e293b',
+            border: `2px solid ${isSelected ? '#f59e0b' : '#334155'}`,
             borderRadius: '0.375rem',
             color: '#f1f5f9',
             fontWeight: 'bold',
-            position: 'relative'
+            position: 'relative',
+            cursor: isSelectingDays ? 'pointer' : 'default',
+            transition: 'all 0.2s ease'
           }
         }, [
+          isSelectingDays && React.createElement('div', {
+            key: 'selection-indicator',
+            style: {
+              position: 'absolute',
+              top: '0.35rem',
+              left: '0.35rem',
+              width: '1rem',
+              height: '1rem',
+              borderRadius: '0.25rem',
+              border: `2px solid ${isSelected ? '#f59e0b' : '#cbd5f5'}`,
+              background: isSelected ? '#f59e0b' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#1e293b',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }
+          }, isSelected ? '✓' : ''),
           React.createElement('div', { key: 'day' }, date.toLocaleDateString('en-US', { weekday: 'short' })),
           React.createElement('div', { key: 'date', style: { fontSize: '0.875rem', color: '#94a3b8' } }, 
             date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
           React.createElement('button', {
             key: 'add-day-shopping',
-            onClick: () => handleAddDayToShoppingList(dateStr),
+            onClick: async (e: React.MouseEvent) => {
+              e.stopPropagation()
+              const result = await handleAddDayToShoppingList(dateStr)
+              if (result.success && result.message) {
+                alert(result.message)
+              } else if (result.error) {
+                alert(result.error)
+              }
+            },
+            disabled: isSelectingDays,
             style: {
               position: 'absolute',
               top: '0.25rem',
               right: '0.25rem',
-              background: '#3b82f6',
-              color: 'white',
+              background: isSelectingDays ? '#475569' : '#3b82f6',
+              color: '#ffffff',
               border: 'none',
               borderRadius: '0.25rem',
-              cursor: 'pointer',
+              cursor: isSelectingDays ? 'not-allowed' : 'pointer',
               fontSize: '0.75rem',
-              padding: '0.25rem 0.5rem'
+              padding: '0.25rem 0.5rem',
+              opacity: isSelectingDays ? 0.6 : 1
             }
           }, '🛒')
         ])
@@ -907,6 +1065,7 @@ export const MealPlanningPage: React.FC = () => {
         ...weekDates.map(date => {
           const dateStr = date.toISOString().split('T')[0]
           const plannedMeal = plannedMeals[`${dateStr}-${mealSlot}`]
+          const dayIsSelected = selectedDates.has(dateStr)
 
           const isDragOver = dragOverSlot?.date === dateStr && dragOverSlot?.mealSlot === mealSlot
           const isBeingDragged = draggedMeal?.date === dateStr && draggedMeal?.mealSlot === mealSlot
@@ -917,16 +1076,16 @@ export const MealPlanningPage: React.FC = () => {
             onDragOver: (e: React.DragEvent) => handleDragOver(e, dateStr, mealSlot),
             onDragLeave: handleDragLeave,
             onDrop: (e: React.DragEvent) => handleDrop(e, dateStr, mealSlot),
-            draggable: !!plannedMeal,
-            onDragStart: plannedMeal ? (e: React.DragEvent) => handleDragStart(e, dateStr, mealSlot, plannedMeal) : undefined,
+            draggable: !isSelectingDays && !!plannedMeal,
+            onDragStart: plannedMeal && !isSelectingDays ? (e: React.DragEvent) => handleDragStart(e, dateStr, mealSlot, plannedMeal) : undefined,
             onDragEnd: handleDragEnd,
             style: {
               padding: '0.5rem',
               minHeight: '80px',
-              background: isDragOver ? '#1e40af' : (plannedMeal ? '#0f172a' : '#1e293b'),
-              border: isDragOver ? '2px dashed #60a5fa' : '1px solid #334155',
+              background: isDragOver ? '#1e40af' : dayIsSelected ? 'rgba(251, 191, 36, 0.1)' : (plannedMeal ? '#0f172a' : '#1e293b'),
+              border: isDragOver ? '2px dashed #60a5fa' : dayIsSelected ? '2px solid #f59e0b' : '1px solid #334155',
               borderRadius: '0.375rem',
-              cursor: plannedMeal ? 'move' : 'pointer',
+              cursor: isSelectingDays ? 'default' : plannedMeal ? 'move' : 'pointer',
               transition: 'all 0.2s',
               opacity: isBeingDragged ? 0.5 : 1,
               transform: isBeingDragged ? 'scale(0.95)' : 'scale(1)',
@@ -976,35 +1135,65 @@ export const MealPlanningPage: React.FC = () => {
                 key: 'actions',
                 style: {
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
+                  gap: '0.5rem',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  marginTop: '0.5rem'
                 }
               }, [
-                React.createElement('span', {
-                  key: 'change-hint',
+                React.createElement('button', {
+                  key: 'change-btn',
+                  onClick: (e: React.MouseEvent) => handleMealCardClick(dateStr, mealSlot, e),
                   style: {
+                    flex: '1',
+                    minWidth: '50px',
+                    padding: '0.35rem 0.6rem',
+                    background: '#374151',
+                    color: '#f1f5f9',
+                    border: '1px solid #4b5563',
+                    borderRadius: '0.25rem',
                     fontSize: '0.75rem',
-                    color: '#64748b',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
                   },
-                  onClick: (e: React.MouseEvent) => handleMealCardClick(dateStr, mealSlot, e)
+                  onMouseEnter: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#475569'
+                  },
+                  onMouseLeave: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#374151'
+                  }
                 }, '🔄 Change'),
                 React.createElement('button', {
                   key: 'add-shopping',
                   onClick: async (e: React.MouseEvent) => {
                     e.stopPropagation()
-                    await handleAddRecipeIngredientsToShoppingList(plannedMeal.recipe)
+                    const result = await handleAddRecipeIngredientsToShoppingList(plannedMeal.recipe)
+                    if (result.success && result.message) {
+                      alert(result.message)
+                    } else if (result.error) {
+                      alert(result.error)
+                    }
                   },
                   style: {
-                    padding: '0.25rem 0.5rem',
+                    flex: '1',
+                    minWidth: '50px',
+                    padding: '0.35rem 0.6rem',
                     background: '#2563eb',
-                    color: '#f1f5f9',
+                    color: 'white',
                     border: '1px solid #1d4ed8',
                     borderRadius: '0.25rem',
                     fontSize: '0.75rem',
                     cursor: 'pointer',
-                    marginLeft: '0.5rem',
-                    marginRight: '0.5rem'
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  },
+                  onMouseEnter: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#1d4ed8'
+                  },
+                  onMouseLeave: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#2563eb'
                   }
                 }, '🛒 Add'),
                 React.createElement('button', {
@@ -1015,13 +1204,23 @@ export const MealPlanningPage: React.FC = () => {
                     handleRemoveMeal(dateStr, mealSlot)
                   },
                   style: {
-                    padding: '0.25rem 0.5rem',
-                    background: '#7f1d1d',
-                    color: '#fca5a5',
-                    border: '1px solid #991b1b',
+                    flex: '1',
+                    minWidth: '50px',
+                    padding: '0.35rem 0.6rem',
+                    background: '#991b1b',
+                    color: '#fecaca',
+                    border: '1px solid #7f1d1d',
                     borderRadius: '0.25rem',
                     fontSize: '0.75rem',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  },
+                  onMouseEnter: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
+                  },
+                  onMouseLeave: (e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
                   }
                 }, 'Remove')
               ])
