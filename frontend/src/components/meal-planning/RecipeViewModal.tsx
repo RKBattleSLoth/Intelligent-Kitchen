@@ -118,11 +118,28 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   }
 
   const currentRecipe = editedRecipe || recipe
-  const displayIngredients = Array.isArray(currentRecipe.ingredients)
-    ? currentRecipe.ingredients.map(ing => 
+  
+  // Helper function to extract ingredients from recipe - matching ShoppingList and RecipeList logic
+  const extractIngredientsForDisplay = (recipe: Recipe): string[] => {
+    if (!recipe) return []
+
+    if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+      return recipe.ingredients.map(ing => 
         typeof ing === 'string' ? ing : `${ing.quantity || ''} ${ing.unit || ''} ${ing.name || ''}`.trim()
       ).filter(Boolean)
-    : []
+    }
+
+    if (typeof recipe.instructions === 'string' && recipe.instructions.trim()) {
+      const parsed = recipeService.parseInstructions(recipe.instructions)
+      if (parsed.items.length > 0) {
+        return parsed.items.map(item => item.text).filter(Boolean)
+      }
+    }
+
+    return []
+  }
+
+  const displayIngredients = extractIngredientsForDisplay(currentRecipe)
   const ingredientCount = displayIngredients.length
 
   const handleAddToShoppingList = async () => {
@@ -156,6 +173,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   }
 
   return React.createElement('div', {
+    onClick: onClose,
     style: {
       position: 'fixed',
       top: 0,
@@ -171,6 +189,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
   }, [
     React.createElement('div', {
       key: 'modal',
+      onClick: (e: React.MouseEvent) => e.stopPropagation(),
       style: {
         background: '#1e293b',
         border: '1px solid #334155',
