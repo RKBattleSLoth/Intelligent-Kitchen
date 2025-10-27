@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import { Recipe } from './types/recipe'
-import { RecipeList } from './components/recipes/RecipeList'
-import { RecipeForm } from './components/recipes/RecipeForm'
 import { MealPlanningPage } from './pages/meal-planning/MealPlanningPage'
 import { ShoppingListPage } from './pages/shopping-lists/ShoppingListPage'
+import RecipesPage from './pages/recipes/RecipesPage'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
@@ -180,47 +178,7 @@ const PlaceholderPage = ({ title, description, emoji }: { title: string; descrip
   ])
 
 function App() {
-  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
-  const [showRecipeForm, setShowRecipeForm] = useState(false)
-
   console.log('App: Rendering with createElement')
-  
-  const handleEditRecipe = (recipe: Recipe) => {
-    setEditingRecipe(recipe)
-    setShowRecipeForm(true)
-  }
-
-  const handleAddRecipe = () => {
-    setEditingRecipe(null)
-    setShowRecipeForm(true)
-  }
-
-  const handleSaveRecipe = (recipe: Recipe) => {
-    setEditingRecipe(null)
-    setShowRecipeForm(false)
-    // Force a re-render by updating the component
-    window.location.reload()
-  }
-
-  const handleCancelRecipe = () => {
-    setEditingRecipe(null)
-    setShowRecipeForm(false)
-  }
-
-  const RecipesPage = () => {
-    if (showRecipeForm) {
-      return React.createElement(RecipeForm, {
-        recipe: editingRecipe || undefined,
-        onSave: handleSaveRecipe,
-        onCancel: handleCancelRecipe
-      })
-    }
-
-    return React.createElement(RecipeList, {
-      onEdit: handleEditRecipe,
-      onAdd: handleAddRecipe
-    })
-  }
   
   return React.createElement(Routes, null, [
     React.createElement(Route, {
