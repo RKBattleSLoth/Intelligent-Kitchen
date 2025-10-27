@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Recipe, RecipeCategory } from '../../types/recipe'
 import { recipeService } from '../../services/recipeService'
+import { shoppingListService } from '../../services/shoppingListService'
+import { RecipeViewModal, ShoppingListAddResult } from '../meal-planning/RecipeViewModal'
 
 interface RecipeListProps {
   onEdit: (recipe: Recipe) => void
@@ -25,6 +27,8 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [isImporting, setIsImporting] = useState(false)
+  const [showRecipeView, setShowRecipeView] = useState(false)
+  const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
 
   useEffect(() => {
     loadRecipes()
@@ -91,6 +95,81 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
       alert(error?.message || 'Failed to import recipe')
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  const handleViewRecipe = (recipe: Recipe) => {
+    setViewingRecipe(recipe)
+    setShowRecipeView(true)
+  }
+
+  const extractIngredientsForShopping = (recipe: Recipe): Array<string | {
+    text?: string
+    quantity?: string | number | null
+    unit?: string | null
+    name?: string | null
+  }> => {
+    if (!recipe) return []
+
+    if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
+      return recipe.ingredients
+    }
+
+    if (typeof recipe.instructions === 'string' && recipe.instructions.trim()) {
+      const parsed = recipeService.parseInstructions(recipe.instructions)
+      if (parsed.items.length > 0) {
+        return parsed.items.map(item => ({
+          text: item.text,
+          quantity: item.quantity ?? item.quantityValue ?? null,
+          unit: item.unit ?? null,
+          name: item.name ?? null
+        }))
+      }
+    }
+
+    return []
+  }
+
+  const handleAddRecipeToShoppingList = async (): Promise<ShoppingListAddResult> => {
+    if (!viewingRecipe) {
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'No recipe selected'
+      }
+    }
+
+    try {
+      const ingredients = extractIngredientsForShopping(viewingRecipe)
+      if (!ingredients.length) {
+        return {
+          success: false,
+          addedCount: 0,
+          error: 'No ingredients found in this recipe'
+        }
+      }
+
+      const addedItems = await shoppingListService.addIngredientsToList(ingredients)
+      if (!addedItems || addedItems.length === 0) {
+        return {
+          success: false,
+          addedCount: 0,
+          error: 'No ingredients were added to the shopping list'
+        }
+      }
+
+      return {
+        success: true,
+        addedCount: addedItems.length,
+        message: `Added ${addedItems.length} ingredient${addedItems.length === 1 ? '' : 's'} to your shopping list from "${viewingRecipe.name}"`
+      }
+    } catch (error) {
+      console.error('Error adding ingredients to shopping list:', error)
+      return {
+        success: false,
+        addedCount: 0,
+        error: 'Failed to add ingredients to shopping list'
+      }
     }
   }
 
@@ -278,12 +357,19 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 }, recipe.category),
                 React.createElement('h3', {
                   key: 'recipe-name',
+                  onClick: () => handleViewRecipe(recipe),
                   style: {
                     fontSize: '1.125rem',
                     fontWeight: 'bold',
                     marginBottom: '0.5rem',
-                    color: '#f1f5f9'
-                  }
+                    color: '#60a5fa',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    textDecorationStyle: 'dotted',
+                    transition: 'color 0.2s'
+                  },
+                  onMouseEnter: (e) => { e.currentTarget.style.color = '#93c5fd' },
+                  onMouseLeave: (e) => { e.currentTarget.style.color = '#60a5fa' }
                 }, recipe.name)
               ]),
 
@@ -350,6 +436,19 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
               ])
             ])
           )
-    )
+    ),
+
+    // Recipe View Modal
+    viewingRecipe && React.createElement(RecipeViewModal, {
+      key: 'recipe-view-modal',
+      isOpen: showRecipeView,
+      onClose: () => {
+        setShowRecipeView(false)
+        setViewingRecipe(null)
+      },
+      recipe: viewingRecipe,
+      isAIGenerated: false,
+      onAddToShoppingList: handleAddRecipeToShoppingList
+    })
   ])
 }
