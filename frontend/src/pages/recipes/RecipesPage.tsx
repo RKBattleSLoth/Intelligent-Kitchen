@@ -474,12 +474,13 @@ const RecipesPage = () => {
                     {recipe.servings ?? '—'} servings
                   </span>
                 </div>
-                <div className="mt-3 flex space-x-2">
+                <div className="mt-4 flex gap-2">
                   <button 
                     onClick={() => handleViewRecipe(recipe.id)}
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-blue-700"
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                    style={{ display: 'block', minHeight: '36px' }}
                   >
-                    View Recipe
+                    👁️ View Recipe
                   </button>
                   <button 
                     onClick={async () => {
