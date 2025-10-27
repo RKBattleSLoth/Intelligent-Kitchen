@@ -34,16 +34,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           style: { display: 'flex', gap: '2rem' }
         }, [
           React.createElement(Link, {
-            key: 'home',
+            key: 'meal-planning',
             to: '/',
             style: {
-              color: location.pathname === '/' ? '#60a5fa' : 'white',
+              color: location.pathname === '/' || location.pathname === '/meal-planning' ? '#60a5fa' : 'white',
               textDecoration: 'none',
               padding: '0.5rem 1rem',
               borderRadius: '0.25rem',
-              background: location.pathname === '/' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
+              background: (location.pathname === '/' || location.pathname === '/meal-planning') ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
             }
-          }, 'Dashboard'),
+          }, 'Meal Planning'),
           React.createElement(Link, {
             key: 'recipes',
             to: '/recipes',
@@ -56,17 +56,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           }, 'Recipes'),
           React.createElement(Link, {
-            key: 'meal-planning',
-            to: '/meal-planning',
-            style: {
-              color: location.pathname === '/meal-planning' ? '#60a5fa' : 'white',
-              textDecoration: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.25rem',
-              background: location.pathname === '/meal-planning' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
-            }
-          }, 'Meal Planning'),
-          React.createElement(Link, {
             key: 'shopping-lists',
             to: '/shopping-lists',
             style: {
@@ -76,7 +65,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               borderRadius: '0.25rem',
               background: location.pathname === '/shopping-lists' ? 'rgba(96, 165, 250, 0.1)' : 'transparent'
             }
-          }, 'Shopping Lists')
+          }, 'Shopping List')
         ])
       ])
     ]),
@@ -88,43 +77,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     }, children)
   ])
 }
-
-const Dashboard = () => React.createElement('div', null, [
-  React.createElement('h1', {
-    key: 'title',
-    style: { fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
-  }, 'Welcome to Intelligent Kitchen! 👋'),
-  React.createElement('p', {
-    key: 'desc',
-    style: { color: '#94a3b8', marginBottom: '2rem' }
-  }, 'Your AI-powered kitchen management system is ready to help you plan meals, manage inventory, and discover recipes.'),
-  
-  React.createElement('div', {
-    key: 'stats',
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-      gap: '1.5rem',
-      marginBottom: '2rem'
-    }
-  }, [
-    React.createElement('div', {
-      key: 'stat2',
-      style: {
-        background: '#1e293b',
-        padding: '1.5rem',
-        borderRadius: '0.5rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        border: '1px solid #334155'
-      }
-    }, [
-      React.createElement('div', { key: 'icon2', style: { fontSize: '2rem', marginBottom: '0.5rem' } }, '📖'),
-      React.createElement('h3', { key: 'title2', style: { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#f1f5f9' } }, 'Recipes'),
-      React.createElement('p', { key: 'value2', style: { color: '#60a5fa', fontSize: '2rem', fontWeight: 'bold' } }, '12'),
-      React.createElement('p', { key: 'change2', style: { color: '#10b981', fontSize: '0.875rem' } }, '+2 new this week')
-    ])
-  ])
-])
 
 const PlaceholderPage = ({ title, description, emoji }: { title: string; description: string; emoji: string }) => 
   React.createElement('div', null, [
@@ -200,7 +152,7 @@ function App() {
     React.createElement(Route, {
       key: 'home',
       path: '/',
-      element: React.createElement(Layout, null, React.createElement(Dashboard))
+      element: React.createElement(Layout, null, React.createElement(MealPlanningPage))
     }),
     React.createElement(Route, {
       key: 'recipes',
