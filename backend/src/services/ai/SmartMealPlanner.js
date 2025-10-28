@@ -552,11 +552,26 @@ OUTPUT RULES:
     }
 
     const recipes = await this.fetchRecipes(userId, recipeSource);
+    console.log('🍳 [FALLBACK_PLAN] Fetched recipes from database:', {
+      totalRecipes: recipes.length,
+      userRecipes: recipes.filter(r => r.user_id).length,
+      publicRecipes: recipes.filter(r => !r.user_id).length,
+      recipeSource,
+      timestamp: new Date().toISOString()
+    });
+    
     const fallbackMeals = [];
-    let recipeIndex = 0;
 
     // High-quality fallback recipes with detailed ingredients and instructions
-    const fallbackRecipes = this.getQualityFallbackRecipes(preferences, peopleCount);
+    // CRITICAL FIX: When recipes exist, prioritize them over hardcoded fallbacks
+    const useFetchedRecipes = recipes && recipes.length > 0;
+    console.log('📝 [FALLBACK_PLAN] Decision:', useFetchedRecipes ? 'Using fetched recipes' : 'Using fallback recipes');
+    
+    // Only use fallback recipes when no user recipes exist
+    const fallbackRecipes = useFetchedRecipes ? recipes : this.getQualityFallbackRecipes(preferences, peopleCount);
+    
+    let recipeIndex = 0;
+    
     const fallbackPools = fallbackRecipes.reduce((acc, recipe) => {
       const type = recipe.mealType || 'any';
       if (!acc[type]) {
