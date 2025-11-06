@@ -69,7 +69,7 @@ class SmartMealPlanner {
       ], {
         model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3.5-sonnet',
         temperature: 0.7,
-        maxTokens: 4000
+        maxTokens: 8000
       });
 
       console.log('✅ [SMART_MEAL_PLANNER] AI response received:', {
@@ -220,55 +220,20 @@ class SmartMealPlanner {
     const endDateObj = new Date(endDate);
     const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
 
-    let prompt = `GENERATE A COMPLETE ${dayCount}-DAY MEAL PLAN FROM ${startDate} TO ${endDate} FOR ${peopleCount} PEOPLE. 
+    let prompt = `Generate ${dayCount * mealTypes.length} meals for ${peopleCount} people from ${startDate} to ${endDate}.
 
-🚨 EXTREMELY IMPORTANT: You MUST generate EXACTLY ${dayCount * mealTypes.length} MEALS - ${dayCount} days × ${mealTypes.length} meal types each.
-🚨 DO NOT generate partial plans or fewer days - this must be a COMPLETE ${dayCount}-day plan.
-🚨 Each day (${startDate} to ${endDate}) MUST include ALL meal types: ${mealTypes.join(', ')}.
+Dietary: ${preferences.dietary || 'none'}
+Cuisines: ${preferences.cuisines?.length > 0 ? preferences.cuisines.join(', ') : 'any'}
+Budget: ${preferences.budget || 'moderate'}
 
-REQUIRED FORMAT: For EACH day from ${startDate} to ${endDate}, you MUST provide:
-- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal
-- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal  
-- ${mealTypes.map(type => type.charAt(0).toUpperCase() + type.slice(1))} meal
+Meal types: ${mealTypes.join(', ')}
 
-TOTAL MEALS REQUIRED: ${dayCount * mealTypes.length}. DO NOT PROCEED UNTIL YOU HAVE GENERATED ALL MEALS.
+Each meal MUST include:
+- Step-by-step instructions (Step 1, Step 2, etc.)
+- Specific ingredient quantities
+- Cooking times and temperatures
 
-Now generate the complete ${dayCount}-day meal plan:
-
-Meal Types to Include: ${mealTypes.join(', ')}
-
-Preferences:
-- Dietary: ${preferences.dietary || 'none'}
-- Health Goal: ${preferences.healthGoal || 'maintain'}
-- Cuisines: ${preferences.cuisines?.length > 0 ? preferences.cuisines.join(', ') : 'any'}
-- Max Cooking Time: ${preferences.maxCookTime ? `${preferences.maxCookTime} minutes` : 'no limit'}
-- Budget Level: ${preferences.budget || 'moderate'}
-
-Recipe Source: ${recipeSource}`;
-
-    if (constraints && constraints.length > 0) {
-      prompt += '\n\nSpecial Constraints:';
-      constraints.forEach(constraint => {
-        prompt += `\n- ${constraint.dayOfWeek} ${constraint.mealType}: ${constraint.requirement}`;
-      });
-    }
-
-    prompt += `\n\nPlease generate a meal plan with detailed recipes. For each meal, include:
-
-1. Specific ingredient quantities (e.g., "2 cups flour" not just "flour")
-2. Multi-step, numbered cooking instructions with temperatures and times
-3. Realistic measurements for ${peopleCount} people
-4. Complete cooking steps that someone can follow exactly
-
-CRITICAL: Each recipe MUST have detailed step-by-step instructions formatted as:
-
-"Step 1: [Action description] (e.g., Preheat oven to 400°F and prepare ingredients)
-Step 2: [Action description] (e.g., Heat oil in large skillet over medium-high heat)
-Step 3: [Action description] (e.g., Add chicken and cook for 5-7 minutes until golden)
-Step 4: [Action description] (e.g., Add vegetables and sauce, simmer for 10 minutes)
-Step 5: [Action description] (e.g., Serve immediately with garnish)"
-
-Please generate a meal plan in the following JSON format:
+JSON format:
 {
   "name": "meal plan name",
   "description": "brief description",
@@ -277,17 +242,9 @@ Please generate a meal plan in the following JSON format:
       "date": "YYYY-MM-DD",
       "mealType": "breakfast|lunch|dinner|snack|dessert",
       "name": "meal name",
-      "description": "brief description of the meal",
-      "instructions": "Step 1: [First action] Step 2: [Second action] Step 3: [Third action] Step 4: [Fourth action] Step 5: [Fifth action]",
-      "ingredients": [
-        "2 cups all-purpose flour",
-        "1 tbsp olive oil", 
-        "2 cloves garlic, minced",
-        "1 lb chicken breast, cubed",
-        "1 cup chicken broth",
-        "2 cups mixed vegetables",
-        "1 tsp dried herbs"
-      ],
+      "description": "brief description",
+      "instructions": "Step 1: Action Step 2: Action Step 3: Action Step 4: Action Step 5: Action",
+      "ingredients": ["2 cups flour", "1 tbsp olive oil", "2 cloves garlic"],
       "cookTime": 30,
       "difficulty": "easy|medium|hard",
       "isUserRecipe": false,
@@ -296,22 +253,7 @@ Please generate a meal plan in the following JSON format:
   ]
 }
 
-REQUIREMENTS:
-- Include specific quantities for ALL ingredients
-- Each recipe MUST have 3+ numbered steps with clear actions
-- Include cooking temperatures (e.g., "Preheat oven to 400°F")
-- Include specific cooking times (e.g., "simmer for 10 minutes")
-- Consider serving ${peopleCount} people in your measurements
-- Use standard cooking measurements (cups, tbsp, tsp, oz, lb, etc.)
-- Steps should be actionable and easy to follow
-- Include preparation steps, cooking steps, and finishing steps`;
-
-    prompt += `
-
-OUTPUT RULES:
-- Respond with VALID JSON ONLY (no markdown, no commentary outside the JSON object)
-- Do not include trailing notes, explanations, or additional text after the JSON
-- Ensure the JSON parses without needing correction`;
+Return valid JSON only. No extra text.`;
 
     return prompt;
   }
