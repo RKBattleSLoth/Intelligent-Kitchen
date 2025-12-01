@@ -16,9 +16,9 @@ class VoiceService {
   private recognition: SpeechRecognition | null = null;
   private synthesis: SpeechSynthesis;
   private isListening: boolean = false;
-  private onCommandCallback?: (command: VoiceCommand) => void;
-  private onResultCallback?: (result: VoiceRecognitionResult) => void;
-  private onErrorCallback?: (error: string) => void;
+  private commandCallbacks: Set<(command: VoiceCommand) => void> = new Set();
+  private resultCallbacks: Set<(result: VoiceRecognitionResult) => void> = new Set();
+  private errorCallbacks: Set<(error: string) => void> = new Set();
 
   constructor() {
     this.synthesis = window.speechSynthesis;
@@ -45,11 +45,13 @@ class VoiceService {
       const transcript = result[0].transcript;
       const confidence = result[0].confidence;
       
-      // Always send result - interim or final
-      this.onResultCallback?.({
-        transcript,
-        confidence,
-        isFinal: result.isFinal
+      // Always send result - interim or final - to ALL listeners
+      this.resultCallbacks.forEach(callback => {
+        callback({
+          transcript,
+          confidence,
+          isFinal: result.isFinal
+        });
       });
       
       // Only process command when final
@@ -86,7 +88,7 @@ class VoiceService {
           errorMessage = `Error: ${event.error}`;
       }
       
-      this.onErrorCallback?.(errorMessage);
+      this.errorCallbacks.forEach(callback => callback(errorMessage));
       console.error('Speech recognition error:', event.error);
     };
 
@@ -97,7 +99,7 @@ class VoiceService {
 
   public startListening(): boolean {
     if (!this.recognition) {
-      this.onErrorCallback?.('Speech recognition is not supported in your browser');
+      this.errorCallbacks.forEach(cb => cb('Speech recognition is not supported in your browser'));
       return false;
     }
 
@@ -111,7 +113,7 @@ class VoiceService {
       return true;
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
-      this.onErrorCallback?.('Failed to start speech recognition');
+      this.errorCallbacks.forEach(cb => cb('Failed to start speech recognition'));
       return false;
     }
   }
@@ -126,16 +128,25 @@ class VoiceService {
     return this.isListening;
   }
 
-  public onCommand(callback: (command: VoiceCommand) => void): void {
-    this.onCommandCallback = callback;
+  public onCommand(callback: (command: VoiceCommand) => void): () => void {
+    this.commandCallbacks.add(callback);
+    // Return unsubscribe function
+    return () => this.commandCallbacks.delete(callback);
   }
 
-  public onResult(callback: (result: VoiceRecognitionResult) => void): void {
-    this.onResultCallback = callback;
+  public onResult(callback: (result: VoiceRecognitionResult) => void): () => void {
+    this.resultCallbacks.add(callback);
+    return () => this.resultCallbacks.delete(callback);
   }
 
-  public onError(callback: (error: string) => void): void {
-    this.onErrorCallback = callback;
+  public onError(callback: (error: string) => void): () => void {
+    this.errorCallbacks.add(callback);
+    return () => this.errorCallbacks.delete(callback);
+  }
+
+  private emitCommand(command: VoiceCommand): void {
+    console.log('Emitting command to', this.commandCallbacks.size, 'listeners:', command.command);
+    this.commandCallbacks.forEach(callback => callback(command));
   }
 
   private processVoiceCommand(transcript: string): void {
@@ -145,7 +156,7 @@ class VoiceService {
     // Help command - check first
     if (normalizedText.includes('help') || normalizedText.includes('commands')) {
       this.speak('Say: Add milk, Go to recipes, Go to shopping, Consolidate, or Add eggs for breakfast Friday');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'help',
         action: 'help',
         parameters: []
@@ -156,7 +167,7 @@ class VoiceService {
     // Navigation Commands - check early
     if (normalizedText.includes('recipe')) {
       console.log('Matched: recipes');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'view_recipes',
         action: 'navigate',
         parameters: ['recipes']
@@ -166,7 +177,7 @@ class VoiceService {
 
     if (normalizedText.includes('shopping') || normalizedText.includes('groceries')) {
       console.log('Matched: shopping list');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'view_shopping_list',
         action: 'navigate',
         parameters: ['shopping-lists']
@@ -177,7 +188,7 @@ class VoiceService {
     if (normalizedText.includes('meal plan') || normalizedText.includes('plan meal') || 
         (normalizedText.includes('meal') && normalizedText.includes('go'))) {
       console.log('Matched: meal planning');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'plan_meals',
         action: 'navigate',
         parameters: ['meal-planning']
@@ -188,7 +199,7 @@ class VoiceService {
     // Consolidate command
     if (normalizedText.includes('consolidate') || normalizedText.includes('merge') || normalizedText.includes('combine')) {
       console.log('Matched: consolidate');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'consolidate_shopping_list',
         action: 'consolidate',
         parameters: []
@@ -215,7 +226,7 @@ class VoiceService {
       
       if (food) {
         console.log('Matched: add meal -', food, mealType, dateStr);
-        this.onCommandCallback?.({
+        this.emitCommand({
           command: 'add_meal',
           action: 'add_meal',
           parameters: [food, mealType, dateStr]
@@ -234,7 +245,7 @@ class VoiceService {
       
       if (item) {
         console.log('Matched: add to shopping list -', item);
-        this.onCommandCallback?.({
+        this.emitCommand({
           command: 'add_to_shopping_list',
           action: 'add',
           parameters: [item]
@@ -252,7 +263,7 @@ class VoiceService {
       
       if (item) {
         console.log('Matched: remove from shopping list -', item);
-        this.onCommandCallback?.({
+        this.emitCommand({
           command: 'remove_from_shopping_list',
           action: 'remove',
           parameters: [item]
@@ -270,7 +281,7 @@ class VoiceService {
       
       if (item) {
         console.log('Matched: check off -', item);
-        this.onCommandCallback?.({
+        this.emitCommand({
           command: 'check_off_item',
           action: 'check',
           parameters: [item]
@@ -282,7 +293,7 @@ class VoiceService {
     // Clear list
     if (normalizedText.includes('clear') && (normalizedText.includes('list') || normalizedText.includes('all'))) {
       console.log('Matched: clear completed');
-      this.onCommandCallback?.({
+      this.emitCommand({
         command: 'clear_completed',
         action: 'clear',
         parameters: []
@@ -292,7 +303,7 @@ class VoiceService {
 
     // Unrecognized
     console.log('Unrecognized command:', transcript);
-    this.onCommandCallback?.({
+    this.emitCommand({
       command: 'unrecognized',
       action: 'unknown',
       parameters: [transcript]

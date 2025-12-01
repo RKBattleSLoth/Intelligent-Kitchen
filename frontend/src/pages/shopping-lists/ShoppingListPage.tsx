@@ -49,24 +49,27 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     checkAIStatus();
     loadTemplates();
 
-    voiceService.onCommand(async (command) => {
+    const unsubCommand = voiceService.onCommand(async (command) => {
       setVoiceError(null);
       await handleVoiceCommand(command);
     });
 
-    voiceService.onResult((result) => {
+    const unsubResult = voiceService.onResult((result) => {
       setVoiceTranscript(result.transcript);
       if (result.isFinal) {
         setIsListening(false);
       }
     });
 
-    voiceService.onError((msg) => {
+    const unsubError = voiceService.onError((msg) => {
       setVoiceError(msg);
       setIsListening(false);
     });
 
     return () => {
+      unsubCommand();
+      unsubResult();
+      unsubError();
       voiceService.stopListening();
     };
   }, []);

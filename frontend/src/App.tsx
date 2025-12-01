@@ -25,14 +25,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   useEffect(() => {
-    voiceService.onCommand((command: VoiceCommand) => {
+    const unsubCommand = voiceService.onCommand((command: VoiceCommand) => {
       setVoiceError(null)
       setIsProcessing(true)
       handleGlobalVoiceCommand(command)
       setTimeout(() => setIsProcessing(false), 500)
     })
 
-    voiceService.onResult((result) => {
+    const unsubResult = voiceService.onResult((result) => {
       // Show transcript in real-time (interim results)
       setVoiceTranscript(result.transcript)
       if (result.isFinal) {
@@ -42,13 +42,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       }
     })
 
-    voiceService.onError((msg) => {
+    const unsubError = voiceService.onError((msg) => {
       setVoiceError(msg)
       setIsListening(false)
       setIsProcessing(false)
     })
 
     return () => {
+      unsubCommand()
+      unsubResult()
+      unsubError()
       voiceService.stopListening()
     }
   }, [])
