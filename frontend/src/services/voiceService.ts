@@ -140,39 +140,100 @@ class VoiceService {
 
   private processVoiceCommand(transcript: string): void {
     const normalizedText = transcript.toLowerCase().trim();
+    console.log('Processing voice command:', normalizedText);
     
-    // Meal Planning Commands - check these first as they're more specific
-    // Pattern: "add [food] as/for [meal] on/for [day]"
-    const mealPlanMatch = normalizedText.match(/(?:add|set|plan|schedule)\s+(.+?)\s+(?:as|for)\s+(breakfast|lunch|dinner|snack)\s+(?:on|for)?\s*(.+)?/i);
-    if (mealPlanMatch) {
-      const [, food, mealType, dateStr] = mealPlanMatch;
+    // Help command - check first
+    if (normalizedText.includes('help') || normalizedText.includes('commands')) {
+      this.speak('Say: Add milk, Go to recipes, Go to shopping, Consolidate, or Add eggs for breakfast Friday');
       this.onCommandCallback?.({
-        command: 'add_meal',
-        action: 'add_meal',
-        parameters: [food.trim(), mealType.trim(), dateStr?.trim() || 'today']
+        command: 'help',
+        action: 'help',
+        parameters: []
       });
       return;
     }
 
-    // Pattern: "[food] for [meal] [day]"
-    const simpleMealMatch = normalizedText.match(/^(.+?)\s+for\s+(breakfast|lunch|dinner|snack)\s+(?:on\s+)?(.+)?$/i);
-    if (simpleMealMatch) {
-      const [, food, mealType, dateStr] = simpleMealMatch;
+    // Navigation Commands - check early
+    if (normalizedText.includes('recipe')) {
+      console.log('Matched: recipes');
       this.onCommandCallback?.({
-        command: 'add_meal',
-        action: 'add_meal',
-        parameters: [food.trim(), mealType.trim(), dateStr?.trim() || 'today']
+        command: 'view_recipes',
+        action: 'navigate',
+        parameters: ['recipes']
       });
       return;
     }
 
-    // Shopping List Commands
-    if (this.matchesPattern(normalizedText, ['add', 'put', 'create']) && 
-        !normalizedText.includes('breakfast') && 
-        !normalizedText.includes('lunch') && 
-        !normalizedText.includes('dinner')) {
-      const item = this.extractItemFromCommand(normalizedText);
+    if (normalizedText.includes('shopping') || normalizedText.includes('groceries')) {
+      console.log('Matched: shopping list');
+      this.onCommandCallback?.({
+        command: 'view_shopping_list',
+        action: 'navigate',
+        parameters: ['shopping-lists']
+      });
+      return;
+    }
+
+    if (normalizedText.includes('meal plan') || normalizedText.includes('plan meal') || 
+        (normalizedText.includes('meal') && normalizedText.includes('go'))) {
+      console.log('Matched: meal planning');
+      this.onCommandCallback?.({
+        command: 'plan_meals',
+        action: 'navigate',
+        parameters: ['meal-planning']
+      });
+      return;
+    }
+
+    // Consolidate command
+    if (normalizedText.includes('consolidate') || normalizedText.includes('merge') || normalizedText.includes('combine')) {
+      console.log('Matched: consolidate');
+      this.onCommandCallback?.({
+        command: 'consolidate_shopping_list',
+        action: 'consolidate',
+        parameters: []
+      });
+      return;
+    }
+
+    // Meal Planning Commands - "add X for breakfast/lunch/dinner"
+    if (normalizedText.includes('breakfast') || normalizedText.includes('lunch') || 
+        normalizedText.includes('dinner') || normalizedText.includes('snack')) {
+      const mealMatch = normalizedText.match(/(breakfast|lunch|dinner|snack)/i);
+      const mealType = mealMatch ? mealMatch[1] : 'dinner';
+      
+      // Extract food - everything before "for breakfast" or after "add"
+      let food = normalizedText
+        .replace(/^(add|set|plan|schedule|put)\s+/i, '')
+        .replace(/\s+(for|as)\s+(breakfast|lunch|dinner|snack).*/i, '')
+        .replace(/\s+(on|for)\s+\w+day.*/i, '')
+        .trim();
+      
+      // Extract date if present
+      const dateMatch = normalizedText.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)/i);
+      const dateStr = dateMatch ? dateMatch[1] : 'today';
+      
+      if (food) {
+        console.log('Matched: add meal -', food, mealType, dateStr);
+        this.onCommandCallback?.({
+          command: 'add_meal',
+          action: 'add_meal',
+          parameters: [food, mealType, dateStr]
+        });
+        return;
+      }
+    }
+
+    // Shopping List - Add item (simple pattern)
+    if (normalizedText.startsWith('add ') || normalizedText.startsWith('put ')) {
+      const item = normalizedText
+        .replace(/^(add|put)\s+/i, '')
+        .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?list$/i, '')
+        .replace(/\s+please$/i, '')
+        .trim();
+      
       if (item) {
+        console.log('Matched: add to shopping list -', item);
         this.onCommandCallback?.({
           command: 'add_to_shopping_list',
           action: 'add',
@@ -182,9 +243,15 @@ class VoiceService {
       }
     }
 
-    if (this.matchesPattern(normalizedText, ['remove', 'delete', 'clear'])) {
-      const item = this.extractItemFromCommand(normalizedText);
+    // Shopping List - Remove item
+    if (normalizedText.startsWith('remove ') || normalizedText.startsWith('delete ')) {
+      const item = normalizedText
+        .replace(/^(remove|delete)\s+/i, '')
+        .replace(/\s+(from\s+)?(the\s+)?(shopping\s+)?list$/i, '')
+        .trim();
+      
       if (item) {
+        console.log('Matched: remove from shopping list -', item);
         this.onCommandCallback?.({
           command: 'remove_from_shopping_list',
           action: 'remove',
@@ -194,9 +261,15 @@ class VoiceService {
       }
     }
 
-    if (this.matchesPattern(normalizedText, ['check off', 'mark done', 'complete'])) {
-      const item = this.extractItemFromCommand(normalizedText);
+    // Shopping List - Check off item
+    if (normalizedText.includes('check') || normalizedText.includes('done') || normalizedText.includes('complete')) {
+      const item = normalizedText
+        .replace(/^(check off|mark done|complete|check)\s+/i, '')
+        .replace(/\s+(from\s+)?(the\s+)?(shopping\s+)?list$/i, '')
+        .trim();
+      
       if (item) {
+        console.log('Matched: check off -', item);
         this.onCommandCallback?.({
           command: 'check_off_item',
           action: 'check',
@@ -206,61 +279,24 @@ class VoiceService {
       }
     }
 
-    if (this.matchesPattern(normalizedText, ['consolidate', 'merge', 'combine'])) {
+    // Clear list
+    if (normalizedText.includes('clear') && (normalizedText.includes('list') || normalizedText.includes('all'))) {
+      console.log('Matched: clear completed');
       this.onCommandCallback?.({
-        command: 'consolidate_shopping_list',
-        action: 'consolidate',
+        command: 'clear_completed',
+        action: 'clear',
         parameters: []
       });
       return;
     }
 
-    // Navigation Commands
-    if (this.matchesPattern(normalizedText, ['plan meals', 'meal plan', 'go to meal', 'open meal'])) {
-      this.onCommandCallback?.({
-        command: 'plan_meals',
-        action: 'navigate',
-        parameters: ['meal-planning']
-      });
-      return;
-    }
-
-    if (this.matchesPattern(normalizedText, ['recipes', 'recipe book', 'go to recipe', 'open recipe'])) {
-      this.onCommandCallback?.({
-        command: 'view_recipes',
-        action: 'navigate',
-        parameters: ['recipes']
-      });
-      return;
-    }
-
-    if (this.matchesPattern(normalizedText, ['shopping list', 'groceries', 'go to shopping', 'open shopping'])) {
-      this.onCommandCallback?.({
-        command: 'view_shopping_list',
-        action: 'navigate',
-        parameters: ['shopping-lists']
-      });
-      return;
-    }
-
-    // Help command
-    if (this.matchesPattern(normalizedText, ['help', 'what can i say', 'commands'])) {
-      this.speak('You can say: Add cereal for breakfast Friday, Add milk to shopping list, Consolidate list, Go to recipes, or Help');
-      this.onCommandCallback?.({
-        command: 'help',
-        action: 'help',
-        parameters: []
-      });
-      return;
-    }
-
-    // Unrecognized - pass through as general command
+    // Unrecognized
+    console.log('Unrecognized command:', transcript);
     this.onCommandCallback?.({
       command: 'unrecognized',
       action: 'unknown',
       parameters: [transcript]
     });
-    console.log('Unrecognized command:', transcript);
   }
 
   private matchesPattern(text: string, patterns: string[]): boolean {
@@ -268,20 +304,12 @@ class VoiceService {
   }
 
   private extractItemFromCommand(text: string): string | null {
-    // Extract item after the command verb
-    const patterns = [
-      /(?:add|put|create|remove|delete|clear|check off|mark done|complete)\s+(.+?)(?:\s+(?:to|from)\s+(?:the\s+)?(?:shopping\s+list|list))?$/i,
-      /(?:add|put|create|remove|delete|clear|check off|mark done|complete)\s+(.+?)\s+(?:please|now)$/i
-    ];
-
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-    }
-
-    return null;
+    // Simple extraction - remove command words
+    const cleaned = text
+      .replace(/^(add|put|create|remove|delete|clear|check off|mark done|complete)\s+/i, '')
+      .replace(/\s+(to|from|on|in)\s+(the\s+)?(shopping\s+)?list$/i, '')
+      .trim();
+    return cleaned || null;
   }
 
   public speak(text: string): void {
