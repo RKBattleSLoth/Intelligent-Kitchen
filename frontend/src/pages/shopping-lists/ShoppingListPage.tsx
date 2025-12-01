@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { shoppingListService } from '../../services/shoppingListService';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { shoppingListService, enhancedShoppingListService, ShoppingListTemplate } from '../../services/shoppingListService';
 import { aiService } from '../../services/aiService';
 import { recipeService } from '../../services/recipeService';
 import { ShoppingListItem } from '../../types/shoppingList';
 import { Recipe } from '../../types/recipe';
+import { voiceService, VoiceCommand } from '../../services/voiceService';
 
 interface ShoppingListPageProps {}
 
 export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,19 +23,59 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
   const [aiStatus, setAiStatus] = useState<string>('checking');
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedRecipes, setSelectedRecipes] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<ShoppingListTemplate[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const itemsRef = useRef<ShoppingListItem[]>([]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   // Load shopping list and recipes on component mount
   useEffect(() => {
     loadShoppingList();
     loadRecipes();
     checkAIStatus();
+    loadTemplates();
+
+    voiceService.onCommand(async (command) => {
+      setVoiceError(null);
+      await handleVoiceCommand(command);
+    });
+
+    voiceService.onResult((result) => {
+      setVoiceTranscript(result.transcript);
+      if (result.isFinal) {
+        setIsListening(false);
+      }
+    });
+
+    voiceService.onError((msg) => {
+      setVoiceError(msg);
+      setIsListening(false);
+    });
+
+    return () => {
+      voiceService.stopListening();
+    };
   }, []);
 
   const loadShoppingList = async () => {
     try {
       setLoading(true);
       setError(null);
-      const listItems = await shoppingListService.getShoppingListItems();
+      const listItems = await enhancedShoppingListService.getShoppingListItems();
       setItems(listItems);
     } catch (err) {
       setError('Failed to load shopping list');
@@ -42,12 +85,90 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }
   };
 
+  const loadTemplates = async () => {
+    try {
+      const [defaultTemplates, storedTemplates] = await Promise.all([
+        enhancedShoppingListService.getTemplates(),
+        enhancedShoppingListService.getStoredTemplates()
+      ]);
+      setTemplates([...defaultTemplates, ...storedTemplates]);
+    } catch (err) {
+      console.error('Error loading templates:', err);
+    }
+  };
+
   const loadRecipes = async () => {
     try {
       const recipeList = await recipeService.getAllRecipes();
       setRecipes(recipeList);
     } catch (err) {
       console.error('Error loading recipes:', err);
+    }
+  };
+
+  // Template-related functions
+  const toggleTemplates = () => {
+    const next = !showTemplates;
+    setShowTemplates(next);
+    if (next) {
+      loadTemplates();
+    }
+  };
+
+  const handleApplyTemplate = async (templateId: string) => {
+    try {
+      const newItems = await enhancedShoppingListService.applyTemplate(templateId);
+      setItems(newItems);
+      setShowTemplates(false);
+      
+      const template = templates.find(t => t.id === templateId);
+      const appliedCount = newItems.length;
+      const templateName = template?.name || 'Custom Template';
+      
+      // Show success message
+      if (templateName && appliedCount > 0) {
+        console.log(`Applied ${templateName} template with ${appliedCount} items`);
+      }
+    } catch (err) {
+      console.error('Error applying template:', err);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (items.length === 0) {
+      setError('Add at least one item before saving a template');
+      return;
+    }
+
+    const nameInput = window.prompt('Name this template', 'My Shopping Template');
+    if (!nameInput) {
+      return;
+    }
+
+    const descriptionInput = window.prompt('Describe this template (optional)', '');
+
+    try {
+      await enhancedShoppingListService.saveAsTemplate(
+        nameInput.trim(),
+        (descriptionInput || '').trim() || 'Custom shopping list template'
+      );
+      await loadTemplates();
+      setShowTemplates(true);
+      setError(null);
+      console.log(`Saved template: ${nameInput}`);
+    } catch (err) {
+      console.error('Error saving template:', err);
+      setError('Failed to save template');
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      await enhancedShoppingListService.deleteStoredTemplate(templateId);
+      await loadTemplates();
+    } catch (err) {
+      console.error('Error deleting template:', err);
+      setError('Failed to delete template');
     }
   };
 
@@ -221,8 +342,25 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
       setAiLoading(true);
       setError(null);
       
+      // Collect all ingredients from all selected recipes first
+      const allNewItems: ShoppingListItem[] = [];
+      
       for (const recipeId of selectedRecipes) {
-        await addRecipeIngredients(recipeId);
+        const recipe = await recipeService.getRecipeById(recipeId);
+        if (!recipe) continue;
+        
+        const ingredients = extractIngredientsForShopping(recipe);
+        if (!ingredients.length) continue;
+        
+        const addedItems = await shoppingListService.addIngredientsToList(ingredients);
+        if (addedItems && addedItems.length > 0) {
+          allNewItems.push(...addedItems);
+        }
+      }
+      
+      // Update state once with all new items
+      if (allNewItems.length > 0) {
+        setItems(prev => [...prev, ...allNewItems]);
       }
       
       setShowRecipeSelector(false);
@@ -264,6 +402,90 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }
   };
 
+  const toggleVoiceListening = () => {
+    if (isListening) {
+      voiceService.stopListening();
+      setIsListening(false);
+      return;
+    }
+
+    const started = voiceService.startListening();
+    if (started) {
+      setIsListening(true);
+      setVoiceTranscript('Listening...');
+      setVoiceError(null);
+    } else {
+      setVoiceError('Speech recognition is not supported in this browser');
+    }
+  };
+
+  const handleVoiceCommand = async (command: VoiceCommand) => {
+    const [primaryParam] = command.parameters || [];
+    const normalizedParam = primaryParam?.toLowerCase().trim();
+
+    switch (command.command) {
+      case 'add_to_shopping_list': {
+        if (!normalizedParam) return;
+        try {
+          const newItem = await shoppingListService.addShoppingListItem(normalizedParam);
+          setItems([...itemsRef.current, newItem]);
+        } catch (err) {
+          console.error('Voice add item failed:', err);
+          setError('Voice command failed to add item');
+        }
+        break;
+      }
+      case 'remove_from_shopping_list': {
+        if (!normalizedParam) return;
+        const target = itemsRef.current.find(item => item.item_text.toLowerCase().includes(normalizedParam));
+        if (!target) {
+          setError(`Could not find ${normalizedParam} in list`);
+          return;
+        }
+        await deleteItem(target);
+        break;
+      }
+      case 'check_off_item': {
+        if (!normalizedParam) return;
+        const target = itemsRef.current.find(item => item.item_text.toLowerCase().includes(normalizedParam));
+        if (!target) {
+          setError(`Could not find ${normalizedParam} to check off`);
+          return;
+        }
+        await toggleItem(target);
+        break;
+      }
+      case 'consolidate_shopping_list': {
+        try {
+          const consolidated = await enhancedShoppingListService.consolidateItems();
+          setItems(consolidated);
+        } catch (err) {
+          console.error('Consolidation failed:', err);
+          setError('Failed to consolidate shopping list');
+        }
+        break;
+      }
+      case 'plan_meals': {
+        navigate('/meal-planning');
+        break;
+      }
+      case 'view_recipes': {
+        navigate('/recipes');
+        break;
+      }
+      case 'view_shopping_list': {
+        navigate('/shopping-lists');
+        break;
+      }
+      case 'help': {
+        setError('Voice help: try commands like "Add milk", "Remove onions", "Plan meals"');
+        break;
+      }
+      default:
+        console.log('Unhandled voice command:', command);
+    }
+  };
+
   if (loading) {
     return React.createElement('div', {
       style: { 
@@ -282,9 +504,11 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
       key: 'header',
       style: { 
         display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
         justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '2rem' 
+        alignItems: isMobile ? 'stretch' : 'center', 
+        marginBottom: isMobile ? '1rem' : '2rem',
+        gap: isMobile ? '1rem' : '0'
       }
     }, [
       React.createElement('div', {
@@ -294,7 +518,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         React.createElement('h1', {
           key: 'title',
           style: { 
-            fontSize: '2rem', 
+            fontSize: isMobile ? '1.5rem' : '2rem', 
             fontWeight: 'bold', 
             color: '#f1f5f9',
             margin: 0
@@ -308,21 +532,21 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
-            fontSize: '0.875rem',
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
             color: aiEnabled ? '#10b981' : '#f59e0b'
           }
         }, [
           React.createElement('span', { key: 'ai-dot' }, aiEnabled ? '🤖' : '⚠️'),
           React.createElement('span', { key: 'ai-text' }, 
             aiEnabled 
-              ? 'AI Recipe Integration Available' 
+              ? (isMobile ? 'AI Available' : 'AI Recipe Integration Available')
               : `AI ${aiStatus === 'checking' ? 'initializing...' : 'unavailable'}`)
         ])
       ]),
       
       React.createElement('div', {
         key: 'header-buttons',
-        style: { display: 'flex', gap: '0.5rem' }
+        style: { display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }
       }, [
         // Add Recipe Ingredients Button
         React.createElement('button', {
@@ -338,16 +562,17 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             background: aiEnabled ? (showRecipeSelector ? '#8b5cf6' : '#6366f1') : '#94a3b8',
             color: 'white',
             border: 'none',
-            padding: '0.5rem 1rem',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
             borderRadius: '0.375rem',
             cursor: aiEnabled ? 'pointer' : 'not-allowed',
-            fontSize: '0.875rem',
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
             display: 'flex',
             alignItems: 'center',
             gap: '0.25rem',
-            opacity: aiEnabled ? 1 : 0.6
+            opacity: aiEnabled ? 1 : 0.6,
+            minHeight: '44px'
           }
-        }, ['🍳', showRecipeSelector ? 'Hide Recipes' : 'Add Recipe Ingredients']),
+        }, ['🍳', isMobile ? 'Recipes' : (showRecipeSelector ? 'Hide Recipes' : 'Add Recipe Ingredients')]),
         
         // Mark All As Complete Button
         items.length > 0 && items.some(item => !item.is_checked) && React.createElement('button', {
@@ -357,15 +582,16 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             background: '#10b981',
             color: 'white',
             border: 'none',
-            padding: '0.5rem 1rem',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
             borderRadius: '0.375rem',
             cursor: 'pointer',
-            fontSize: '0.875rem',
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.25rem'
+            gap: '0.25rem',
+            minHeight: '44px'
           }
-        }, ['✓', 'Mark All Complete']),
+        }, ['✓', isMobile ? 'Complete All' : 'Mark All Complete']),
         
         // Copy All Button
         items.length > 0 && React.createElement('button', {
@@ -375,15 +601,42 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             background: '#3b82f6',
             color: 'white',
             border: 'none',
-            padding: '0.5rem 1rem',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
             borderRadius: '0.375rem',
             cursor: 'pointer',
-            fontSize: '0.875rem',
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.25rem'
+            gap: '0.25rem',
+            minHeight: '44px'
           }
-        }, ['📋', 'Copy All']),
+        }, ['📋', 'Copy']),
+        
+        // Consolidate Button
+        items.length > 1 && React.createElement('button', {
+          key: 'consolidate-btn',
+          onClick: async () => {
+            try {
+              const consolidated = await enhancedShoppingListService.consolidateItems();
+              setItems(consolidated);
+            } catch (err) {
+              setError('Failed to consolidate list');
+            }
+          },
+          style: {
+            background: '#8b5cf6',
+            color: 'white',
+            border: 'none',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            minHeight: '44px'
+          }
+        }, ['🔗', 'Consolidate']),
         
         // Clear Completed Button
         items.some(item => item.is_checked) && React.createElement('button', {
@@ -393,13 +646,71 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             background: '#ef4444',
             color: 'white',
             border: 'none',
-            padding: '0.5rem 1rem',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
             borderRadius: '0.375rem',
             cursor: 'pointer',
-            fontSize: '0.875rem'
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
+            minHeight: '44px'
           }
-        }, 'Clear Completed')
+        }, isMobile ? 'Clear' : 'Clear Completed'),
+
+        React.createElement('button', {
+          key: 'voice-btn',
+          onClick: toggleVoiceListening,
+          style: {
+            background: isListening ? '#f97316' : '#6366f1',
+            color: 'white',
+            border: 'none',
+            padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
+            borderRadius: '9999px',
+            cursor: 'pointer',
+            fontSize: isMobile ? '0.8125rem' : '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            minHeight: '44px'
+          }
+        }, [isListening ? '🛑 Stop' : '🎙️ Voice'])
       ])
+    ]),
+
+    React.createElement('div', {
+      key: 'voice-status',
+      style: {
+        background: '#0f172a',
+        borderRadius: '0.5rem',
+        padding: '1rem',
+        border: `1px solid ${isListening ? '#f97316' : '#334155'}`,
+        marginBottom: '1rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '1rem'
+      }
+    }, [
+      React.createElement('div', {
+        key: 'voice-info',
+        style: { color: '#f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.25rem' }
+      }, [
+        React.createElement('strong', {
+          key: 'voice-title',
+          style: { color: isListening ? '#f97316' : '#94a3b8' }
+        }, isListening ? 'Listening for commands…' : 'Voice assistant idle'),
+        voiceTranscript && React.createElement('span', {
+          key: 'voice-transcript',
+          style: { color: '#cbd5f5', fontSize: '0.875rem' }
+        }, `Heard: ${voiceTranscript}`)
+      ]),
+      voiceError && React.createElement('span', {
+        key: 'voice-error',
+        style: {
+          color: '#fecaca',
+          background: '#7f1d1d',
+          padding: '0.5rem 0.75rem',
+          borderRadius: '0.375rem',
+          fontSize: '0.875rem'
+        }
+      }, voiceError)
     ]),
 
     // Recipe Selector Panel
@@ -430,8 +741,8 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         key: 'recipe-list',
         style: {
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: '1rem',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: isMobile ? '0.75rem' : '1rem',
           marginBottom: '1rem'
         }
       }, 
@@ -560,7 +871,166 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             }
           }, [aiLoading ? '⏳' : '🛒', aiLoading ? 'Processing...' : `Add Ingredients (${selectedRecipes.length})`])
         ])
-      ])
+      ]),
+
+    // Template buttons
+    React.createElement('div', {
+      key: 'template-actions',
+      style: {
+        display: 'flex',
+        gap: '0.75rem',
+        marginTop: '1rem',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+      }
+    }, [
+      React.createElement('button', {
+        key: 'templates-btn',
+        onClick: toggleTemplates,
+        style: {
+          background: showTemplates ? '#8b5cf6' : '#1f2937',
+          color: 'white',
+          border: 'none',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.375rem',
+          cursor: 'pointer',
+          fontSize: '0.875rem'
+        }
+      }, [showTemplates ? 'Hide Templates' : 'Show Templates']),
+      
+      React.createElement('button', {
+        key: 'save-template-btn',
+        onClick: handleSaveTemplate,
+        disabled: items.length === 0,
+        style: {
+          background: items.length > 0 ? '#10b981' : '#6b7280',
+          color: 'white',
+          border: 'none',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.375rem',
+          cursor: items.length > 0 ? 'pointer' : 'not-allowed',
+          fontSize: '0.875rem'
+        }
+      }, ['Save Current List as Template'])
+    ])
+    ]),
+
+    showTemplates && React.createElement('div', {
+      key: 'templates-panel',
+      style: {
+        background: '#0f172a',
+        borderRadius: '0.75rem',
+        padding: '1.5rem',
+        marginTop: '1rem',
+        border: '1px solid #334155'
+      }
+    }, [
+      React.createElement('h3', {
+        key: 'template-title',
+        style: {
+          fontSize: '1.25rem',
+          fontWeight: 'bold',
+          color: '#f1f5f9',
+          marginBottom: '1rem',
+          display: 'flex',
+          gap: '0.5rem',
+          alignItems: 'center'
+        }
+      }, ['📦', 'Shopping List Templates']),
+
+      React.createElement('div', {
+        key: 'template-list',
+        style: {
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: isMobile ? '0.75rem' : '1rem'
+        }
+      },
+        templates.length > 0
+          ? templates.map(template => React.createElement('div', {
+              key: template.id,
+              style: {
+                background: '#1e293b',
+                border: '1px solid #334155',
+                borderRadius: '0.5rem',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem'
+              }
+            }, [
+              React.createElement('div', {
+                key: 'card-header',
+                style: {
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }
+              }, [
+                React.createElement('h4', {
+                  key: 'template-name',
+                  style: {
+                    color: '#f8fafc',
+                    margin: 0,
+                    fontSize: '1rem'
+                  }
+                }, template.name),
+                !template.isDefault && React.createElement('button', {
+                  key: 'delete-template',
+                  onClick: () => {
+                    if (window.confirm('Delete this template?')) {
+                      handleDeleteTemplate(template.id);
+                    }
+                  },
+                  style: {
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }
+                }, 'Delete')
+              ]),
+              React.createElement('p', {
+                key: 'template-description',
+                style: {
+                  color: '#cbd5f5',
+                  margin: 0,
+                  fontSize: '0.875rem'
+                }
+              }, template.description || 'Custom template'),
+              React.createElement('span', {
+                key: 'template-count',
+                style: {
+                  color: '#94a3b8',
+                  fontSize: '0.75rem'
+                }
+              }, `${template.items.length} items`),
+              React.createElement('button', {
+                key: 'apply-template',
+                onClick: () => handleApplyTemplate(template.id),
+                style: {
+                  background: '#6366f1',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem'
+                }
+              }, 'Apply Template')
+            ]))
+          : React.createElement('p', {
+              key: 'no-templates',
+              style: {
+                color: '#94a3b8',
+                margin: 0,
+                fontSize: '0.875rem'
+              }
+            }, 'No templates available yet. Save your current list to build a template.')
+      )
     ]),
 
     // Error message
@@ -651,7 +1121,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
       // Shopping list items
       React.createElement('div', {
         key: 'items',
-        style: { maxHeight: '500px', overflowY: 'auto' }
+        style: { maxHeight: isMobile ? '60vh' : '500px', overflowY: 'auto' }
       }, 
         items.length > 0 
           ? items.map(item =>
@@ -660,8 +1130,8 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                 style: {
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem',
+                  gap: isMobile ? '0.5rem' : '0.75rem',
+                  padding: isMobile ? '0.875rem' : '0.75rem',
                   background: item.is_checked ? '#0f172a' : 'transparent',
                   borderRadius: '0.375rem',
                   marginBottom: '0.5rem',
@@ -675,10 +1145,12 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                   checked: item.is_checked,
                   onChange: () => toggleItem(item),
                   style: {
-                    width: '1.25rem',
-                    height: '1.25rem',
+                    width: isMobile ? '1.5rem' : '1.25rem',
+                    height: isMobile ? '1.5rem' : '1.25rem',
                     cursor: 'pointer',
-                    accentColor: '#10b981'
+                    accentColor: '#10b981',
+                    minWidth: '24px',
+                    minHeight: '24px'
                   }
                 }),
                 
@@ -718,16 +1190,18 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                     background: '#ef4444',
                     color: 'white',
                     border: 'none',
-                    padding: '0.5rem',
+                    padding: isMobile ? '0.75rem' : '0.5rem',
                     borderRadius: '0.25rem',
                     cursor: 'pointer',
-                    fontSize: '0.75rem',
+                    fontSize: isMobile ? '0.8125rem' : '0.75rem',
                     opacity: 0.8,
-                    transition: 'opacity 0.2s'
+                    transition: 'opacity 0.2s',
+                    minWidth: '44px',
+                    minHeight: '44px'
                   },
                   onMouseEnter: (e) => { e.currentTarget.style.opacity = '1'; },
                   onMouseLeave: (e) => { e.currentTarget.style.opacity = '0.8'; }
-                }, 'Delete')
+                }, isMobile ? '🗑️' : 'Delete')
               ])
             )
           : React.createElement('div', {

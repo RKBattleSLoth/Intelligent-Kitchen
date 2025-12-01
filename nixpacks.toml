@@ -1,0 +1,14 @@
+# Backend service
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm"]
+
+[phases.build]
+cmds = [
+  "cd backend && npm ci --omit=dev",
+  "cd backend && npm run build"
+]
+
+[start]
+cmd = "cd backend && npm start"
+
+# Frontend service would need to be deployed separately
