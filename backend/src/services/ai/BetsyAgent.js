@@ -290,21 +290,42 @@ Now interpret the user input and respond with JSON only:`;
     }
 
     // Search for recipe online / web search (check before generic recipe navigation)
-    if ((text.includes('search') || text.includes('find') || text.includes('look up') || text.includes('look for')) && 
+    if ((text.includes('search') || text.includes('find') || text.includes('look up') || text.includes('look for') || text.includes('import')) && 
         (text.includes('recipe') || text.includes('from')) &&
         (text.includes('online') || text.includes('web') || text.includes('internet') || 
          text.includes('half baked') || text.includes('allrecipes') || text.includes('food network') ||
          text.includes('bon appetit') || text.includes('serious eats'))) {
-      const queryMatch = text.match(/(?:for|recipe\s+for)\s+(.+?)(?:\s+from|\s+on|\s+online|$)/i);
+      
+      // Extract the recipe name - look for pattern like "white chicken chili from half baked harvest"
+      let recipeName = '';
+      const fromMatch = text.match(/(?:find|search|look\s+(?:up|for)|import|get|want)\s+(?:the\s+)?(?:a\s+)?(?:recipe\s+for\s+)?(.+?)\s+(?:from|on|at)\s+/i);
+      if (fromMatch) {
+        recipeName = fromMatch[1].trim();
+      } else {
+        // Try to extract after common verbs
+        const verbMatch = text.match(/(?:find|search|look\s+(?:up|for)|import|make)\s+(?:the\s+)?(?:a\s+)?(?:recipe\s+for\s+)?(.+?)(?:\s+recipe)?$/i);
+        if (verbMatch) {
+          recipeName = verbMatch[1].replace(/\s+recipe$/i, '').trim();
+        }
+      }
+      
+      // Clean up the recipe name
+      recipeName = recipeName
+        .replace(/^(the|a|an)\s+/i, '')
+        .replace(/\s+(recipe|and add it|please).*$/i, '')
+        .trim();
+      
+      const source = text.match(/(half baked harvest|allrecipes|food network|bon appetit|serious eats)/i)?.[1] || null;
+      
       return {
         success: true,
         intent: 'web_search_recipe',
         entities: { 
-          query: queryMatch ? queryMatch[1].trim() : text.replace(/search|find|look|up|for|recipe|online|web/gi, '').trim(),
-          source: text.match(/(half baked harvest|allrecipes|food network|bon appetit|serious eats)/i)?.[1] || null
+          query: recipeName || 'recipe',
+          source: source
         },
         confidence: 0.7,
-        response: "I'll search for that recipe online!",
+        response: `I'll search for ${recipeName ? `"${recipeName}"` : 'that recipe'} online!`,
         metadata: { method: 'fallback' }
       };
     }

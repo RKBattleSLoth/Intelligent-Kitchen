@@ -222,16 +222,28 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         break;
 
       case 'web_search_recipe':
-        // Search for recipe online and provide URL for import
-        const searchQuery = entities.query || entities.recipeName || 'recipe';
-        const source = entities.source ? ` site:${entities.source.toLowerCase().replace(/\s+/g, '')}` : '';
-        addBetsyMessage(
-          `I'll search for "${searchQuery}" recipes online. Once you find one you like, share the URL and I'll import it for you!`,
-          { type: 'recipe', details: 'Web search', success: true }
-        );
-        // Open search in new tab
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery + ' recipe' + source)}`;
-        window.open(searchUrl, '_blank');
+        {
+          // Search for recipe online and provide URL for import
+          const recipeQuery = entities.query || entities.recipeName || '';
+          const siteSource = entities.source ? entities.source.toLowerCase().replace(/\s+/g, '') : '';
+          
+          // Build clean search query
+          let googleQuery = recipeQuery;
+          if (!googleQuery.toLowerCase().includes('recipe')) {
+            googleQuery += ' recipe';
+          }
+          if (siteSource) {
+            googleQuery += ` site:${siteSource}.com`;
+          }
+          
+          addBetsyMessage(
+            `I'll search for "${recipeQuery}" ${siteSource ? `on ${entities.source}` : 'online'}. Once you find one you like, share the URL and I'll import it for you!`,
+            { type: 'recipe', details: 'Web search', success: true }
+          );
+          // Open search in new tab
+          const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleQuery.trim())}`;
+          window.open(searchUrl, '_blank');
+        }
         break;
 
       case 'add_recipe_to_shopping_list':
