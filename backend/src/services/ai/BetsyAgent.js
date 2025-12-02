@@ -315,8 +315,9 @@ Now interpret the user input and respond with JSON only:`;
     }
 
     // Generate meals pattern (check before navigate to meal planning)
-    if ((text.includes('generate') || text.includes('create') || text.includes('smart meal planner') || 
-         text.includes('make meals') || text.includes('plan meals')) && 
+    if ((text.includes('generate') || text.includes('create') || text.includes('smart meal') || 
+         text.includes('make meals') || text.includes('plan meals') || text.includes('do meal planning') ||
+         text.includes('do smart') || text.includes("let's do") || text.includes('build meal')) && 
         (text.includes('meal') || text.includes('week') || text.includes('plan'))) {
       let timeRange = 'this_week';
       if (text.includes('today')) timeRange = 'today';

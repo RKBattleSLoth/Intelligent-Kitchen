@@ -256,16 +256,30 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         if (entities.day1 && entities.mealType1 && entities.day2 && entities.mealType2) {
           const date1 = getDateFromDayName(entities.day1);
           const date2 = getDateFromDayName(entities.day2);
-          const meal1 = mealPlanService.getPlannedMeal(date1, capitalize(entities.mealType1));
-          const meal2 = mealPlanService.getPlannedMeal(date2, capitalize(entities.mealType2));
+          const slot1 = capitalize(entities.mealType1);
+          const slot2 = capitalize(entities.mealType2);
+          
+          // Debug: log what we're looking for
+          console.log('[BetsyChat] Looking for meals:', { date1, slot1, date2, slot2 });
+          const allPlans = mealPlanService.getAllMealPlans();
+          console.log('[BetsyChat] All meal plans:', allPlans);
+          
+          const meal1 = mealPlanService.getPlannedMeal(date1, slot1);
+          const meal2 = mealPlanService.getPlannedMeal(date2, slot2);
+          
+          console.log('[BetsyChat] Found meals:', { meal1, meal2 });
+          
           if (meal1 && meal2) {
-            mealPlanService.removePlannedMeal(date1, capitalize(entities.mealType1));
-            mealPlanService.removePlannedMeal(date2, capitalize(entities.mealType2));
-            mealPlanService.addPlannedMeal(date1, capitalize(entities.mealType1), meal2.recipe);
-            mealPlanService.addPlannedMeal(date2, capitalize(entities.mealType2), meal1.recipe);
+            mealPlanService.removePlannedMeal(date1, slot1);
+            mealPlanService.removePlannedMeal(date2, slot2);
+            mealPlanService.addPlannedMeal(date1, slot1, meal2.recipe);
+            mealPlanService.addPlannedMeal(date2, slot2, meal1.recipe);
             addBetsyMessage(`Swapped meals!`, { type: 'meal_plan', details: 'Swapped', success: true });
           } else {
-            addBetsyMessage("Couldn't find both meals to swap.");
+            const missing = [];
+            if (!meal1) missing.push(`${entities.day1} ${entities.mealType1}`);
+            if (!meal2) missing.push(`${entities.day2} ${entities.mealType2}`);
+            addBetsyMessage(`Couldn't find meals for: ${missing.join(' and ')}. Check the Meal Planning page to see your scheduled meals.`);
           }
         }
         break;

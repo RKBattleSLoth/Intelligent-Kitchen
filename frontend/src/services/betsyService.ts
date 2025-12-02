@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../config/apiConfig';
+import { mealPlanService } from './mealPlanService';
 
 export interface ShoppingItem {
   name: string;
@@ -128,7 +129,7 @@ class BetsyService {
   /**
    * Generate meals using AI for a date range
    */
-  async generateMeals(timeRange: string): Promise<{ success: boolean; mealCount: number; error?: string }> {
+  async generateMeals(timeRange: string): Promise<{ success: boolean; mealCount: number; mealPlan?: any; error?: string }> {
     try {
       const { startDate, endDate } = this.getDateRangeFromTimeRange(timeRange);
       
@@ -141,11 +142,20 @@ class BetsyService {
         peopleCount: 4
       });
 
-      const mealCount = response.data.mealPlan?.meals?.length || 0;
+      const mealPlan = response.data.mealPlan;
+      const mealCount = mealPlan?.meals?.length || 0;
+      
+      // CRITICAL: Sync the generated meals to local storage so they appear in UI
+      if (mealPlan && mealPlan.meals && mealPlan.meals.length > 0) {
+        console.log('[BetsyService] Syncing', mealCount, 'meals to local storage...');
+        mealPlanService.syncAIMealPlan(mealPlan);
+        console.log('[BetsyService] Meals synced successfully!');
+      }
       
       return {
         success: response.data.success !== false,
-        mealCount
+        mealCount,
+        mealPlan
       };
     } catch (error: any) {
       console.error('[BetsyService] Generate meals error:', error);
