@@ -14,16 +14,35 @@ class BetsyAgent {
 
   /**
    * Interpret user input and return structured intent + entities
+   * Strategy: Try fast fallback first, only use LLM for unknown/ambiguous commands
    */
   async interpret(userInput, context = {}) {
     const startTime = Date.now();
     
     console.log('🤖 [BETSY_AGENT] Interpreting:', {
       input: userInput,
-      context,
-      model: this.model
+      context
     });
 
+    // Try fallback patterns first (instant, free)
+    const fallbackResult = this.fallbackInterpret(userInput);
+    
+    // If fallback found a known intent, use it
+    if (fallbackResult.intent !== 'unknown') {
+      const processingTime = Date.now() - startTime;
+      console.log('✅ [BETSY_AGENT] Fallback matched in', processingTime, 'ms:', fallbackResult.intent);
+      return {
+        ...fallbackResult,
+        metadata: {
+          ...fallbackResult.metadata,
+          processingTimeMs: processingTime
+        }
+      };
+    }
+
+    // Only use LLM for truly ambiguous/unknown commands
+    console.log('🤖 [BETSY_AGENT] Fallback returned unknown, trying LLM...');
+    
     const prompt = this.buildInterpretationPrompt(userInput, context);
 
     try {
@@ -45,7 +64,7 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown, no explanation, just the J
       });
 
       const processingTime = Date.now() - startTime;
-      console.log('✅ [BETSY_AGENT] Response received in', processingTime, 'ms');
+      console.log('✅ [BETSY_AGENT] LLM response received in', processingTime, 'ms');
 
       // Parse the JSON response
       const parsed = this.parseResponse(response.content);
@@ -55,16 +74,17 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown, no explanation, just the J
         ...parsed,
         metadata: {
           model: this.model,
+          method: 'llm',
           processingTimeMs: processingTime,
           tokensUsed: response.usage?.total_tokens || 0
         }
       };
 
     } catch (error) {
-      console.error('❌ [BETSY_AGENT] Error:', error.message);
+      console.error('❌ [BETSY_AGENT] LLM Error:', error.message);
       
-      // Fallback to keyword matching if LLM fails
-      return this.fallbackInterpret(userInput);
+      // Return the fallback result (which was 'unknown')
+      return fallbackResult;
     }
   }
 
