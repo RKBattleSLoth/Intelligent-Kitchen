@@ -1,0 +1,261 @@
+/**
+ * BetsyAgent - LLM-powered intent classification for kitchen assistant
+ * Interprets natural language commands and extracts structured intents + entities
+ */
+
+const OpenRouterClient = require('./OpenRouterClient');
+
+class BetsyAgent {
+  constructor() {
+    this.client = new OpenRouterClient();
+    this.model = process.env.OPENROUTER_BETSY_MODEL || 'anthropic/claude-3-haiku-20240307';
+  }
+
+  /**
+   * Interpret user input and return structured intent + entities
+   */
+  async interpret(userInput, context = {}) {
+    const startTime = Date.now();
+    
+    console.log('🤖 [BETSY_AGENT] Interpreting:', {
+      input: userInput,
+      context,
+      model: this.model
+    });
+
+    const prompt = this.buildInterpretationPrompt(userInput, context);
+
+    try {
+      const response = await this.client.chat([
+        {
+          role: 'system',
+          content: `You are Betsy, a helpful kitchen assistant. Your job is to interpret user commands and return structured JSON responses.
+
+IMPORTANT: Respond ONLY with valid JSON, no markdown, no explanation, just the JSON object.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ], {
+        model: this.model,
+        temperature: 0.1,
+        maxTokens: 500
+      });
+
+      const processingTime = Date.now() - startTime;
+      console.log('✅ [BETSY_AGENT] Response received in', processingTime, 'ms');
+
+      // Parse the JSON response
+      const parsed = this.parseResponse(response.content);
+      
+      return {
+        success: true,
+        ...parsed,
+        metadata: {
+          model: this.model,
+          processingTimeMs: processingTime,
+          tokensUsed: response.usage?.total_tokens || 0
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ [BETSY_AGENT] Error:', error.message);
+      
+      // Fallback to keyword matching if LLM fails
+      return this.fallbackInterpret(userInput);
+    }
+  }
+
+  buildInterpretationPrompt(userInput, context) {
+    return `Interpret this kitchen assistant command and return a JSON response.
+
+USER INPUT: "${userInput}"
+
+AVAILABLE INTENTS:
+1. "add_shopping_item" - Add item(s) to shopping list
+   entities: { items: [{ name: string, quantity?: string, unit?: string }] }
+   
+2. "navigate" - Go to a page in the app
+   entities: { destination: "recipes" | "shopping_list" | "meal_planning" }
+   
+3. "add_meal" - Plan a meal for a specific time
+   entities: { food: string, mealType: "breakfast" | "lunch" | "dinner" | "snack", day?: string }
+   
+4. "remove_shopping_item" - Remove item from shopping list
+   entities: { itemName: string }
+   
+5. "clear_shopping_list" - Clear all items from shopping list
+   entities: {}
+   
+6. "help" - User needs help or instructions
+   entities: {}
+   
+7. "greeting" - User is saying hello or starting conversation
+   entities: {}
+   
+8. "unknown" - Cannot determine intent
+   entities: {}
+
+RESPONSE FORMAT (JSON only, no markdown):
+{
+  "intent": "<intent_name>",
+  "entities": { ... },
+  "confidence": 0.0-1.0,
+  "response": "<friendly response to say to user>"
+}
+
+EXAMPLES:
+- "add a gallon of milk to my shopping list" → add_shopping_item with items: [{ name: "milk", quantity: "1", unit: "gallon" }]
+- "put eggs and butter on the list" → add_shopping_item with items: [{ name: "eggs" }, { name: "butter" }]
+- "show me recipes" → navigate with destination: "recipes"
+- "plan pancakes for breakfast saturday" → add_meal with food: "pancakes", mealType: "breakfast", day: "saturday"
+- "I need bread, 2 dozen eggs, and a pound of cheese" → add_shopping_item with items: [{ name: "bread" }, { name: "eggs", quantity: "2", unit: "dozen" }, { name: "cheese", quantity: "1", unit: "pound" }]
+
+Now interpret the user input and respond with JSON only:`;
+  }
+
+  parseResponse(content) {
+    try {
+      // Remove any markdown code blocks if present
+      let cleaned = content.trim();
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/```json?\n?/g, '').replace(/```\n?$/g, '');
+      }
+      
+      const parsed = JSON.parse(cleaned);
+      
+      // Validate required fields
+      if (!parsed.intent) {
+        throw new Error('Missing intent field');
+      }
+      
+      return {
+        intent: parsed.intent,
+        entities: parsed.entities || {},
+        confidence: parsed.confidence || 0.5,
+        response: parsed.response || this.getDefaultResponse(parsed.intent)
+      };
+    } catch (error) {
+      console.error('❌ [BETSY_AGENT] Failed to parse response:', error.message);
+      console.error('Raw content:', content);
+      
+      return {
+        intent: 'unknown',
+        entities: {},
+        confidence: 0,
+        response: "I'm having trouble understanding. Could you try rephrasing that?"
+      };
+    }
+  }
+
+  getDefaultResponse(intent) {
+    const responses = {
+      add_shopping_item: "I'll add that to your shopping list.",
+      navigate: "Taking you there now!",
+      add_meal: "I'll add that to your meal plan.",
+      remove_shopping_item: "I'll remove that from your list.",
+      clear_shopping_list: "I'll clear your shopping list.",
+      help: "I can help you manage shopping lists, plan meals, and navigate the app.",
+      greeting: "Hello! How can I help you in the kitchen today?",
+      unknown: "I'm not sure what you mean. Try saying 'help' for options."
+    };
+    return responses[intent] || responses.unknown;
+  }
+
+  /**
+   * Fallback interpretation using keyword matching (when LLM fails)
+   */
+  fallbackInterpret(userInput) {
+    const text = userInput.toLowerCase();
+    
+    console.log('⚠️ [BETSY_AGENT] Using fallback interpretation');
+
+    // Check for add shopping item patterns first (before navigation)
+    if (text.match(/^(add|put|get|buy|need|pick up)\b/i) && !text.match(/\b(breakfast|lunch|dinner|snack)\b/i)) {
+      const itemText = text
+        .replace(/^(add|put|get|buy|need|pick up)\s+/i, '')
+        .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?(list|cart).*$/i, '')
+        .replace(/\s+please$/i, '')
+        .trim();
+      
+      if (itemText) {
+        return {
+          success: true,
+          intent: 'add_shopping_item',
+          entities: { items: [{ name: itemText }] },
+          confidence: 0.6,
+          response: `I'll add "${itemText}" to your shopping list.`,
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Navigation patterns
+    if (text.includes('recipe')) {
+      return {
+        success: true,
+        intent: 'navigate',
+        entities: { destination: 'recipes' },
+        confidence: 0.7,
+        response: 'Taking you to recipes!',
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    if (text.includes('shopping') || text.includes('groceries') || text.includes('list')) {
+      return {
+        success: true,
+        intent: 'navigate',
+        entities: { destination: 'shopping_list' },
+        confidence: 0.7,
+        response: "Here's your shopping list!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    if (text.includes('meal') || text.includes('plan')) {
+      return {
+        success: true,
+        intent: 'navigate',
+        entities: { destination: 'meal_planning' },
+        confidence: 0.7,
+        response: "Let's work on your meal plan!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    if (text.includes('help')) {
+      return {
+        success: true,
+        intent: 'help',
+        entities: {},
+        confidence: 0.9,
+        response: "I can help you add items to your shopping list, plan meals, or navigate the app. Just tell me what you need!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    if (text.match(/^(hi|hello|hey|good morning|good afternoon|good evening)/i)) {
+      return {
+        success: true,
+        intent: 'greeting',
+        entities: {},
+        confidence: 0.9,
+        response: "Hello! I'm Betsy, your kitchen assistant. How can I help you today?",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    return {
+      success: true,
+      intent: 'unknown',
+      entities: {},
+      confidence: 0.3,
+      response: `I'm not sure how to help with "${userInput}". Try saying "help" to see what I can do!`,
+      metadata: { method: 'fallback' }
+    };
+  }
+}
+
+module.exports = BetsyAgent;

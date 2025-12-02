@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { voiceService, VoiceCommand } from '../../services/voiceService';
+import { voiceService } from '../../services/voiceService';
 import { shoppingListService } from '../../services/shoppingListService';
+import { betsyService, BetsyInterpretation } from '../../services/betsyService';
 
 interface Message {
   id: string;
@@ -122,109 +123,125 @@ export const BetsyPage: React.FC = () => {
   };
 
   const processCommand = async (text: string) => {
-    // Navigation commands
-    if (text.includes('recipe')) {
-      addBetsyMessage("Taking you to your recipes!", { type: 'navigate', details: 'Recipes', success: true });
-      setTimeout(() => navigate('/recipes'), 500);
-      return;
-    }
-
-    if (text.includes('shopping') || text.includes('groceries')) {
-      addBetsyMessage("Here's your shopping list!", { type: 'navigate', details: 'Shopping List', success: true });
-      setTimeout(() => navigate('/shopping-lists'), 500);
-      return;
-    }
-
-    if (text.includes('meal plan') || text.includes('plan meal') || text.includes('meal planning')) {
-      addBetsyMessage("Let's work on your meal plan!", { type: 'navigate', details: 'Meal Planning', success: true });
-      setTimeout(() => navigate('/meal-planning'), 500);
-      return;
-    }
-
-    // Shopping list commands
-    if (text.startsWith('add ') && !text.includes('breakfast') && !text.includes('lunch') && !text.includes('dinner')) {
-      const item = text
-        .replace(/^add\s+/i, '')
-        .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?list$/i, '')
-        .replace(/\s+please$/i, '')
-        .trim();
-
-      if (item) {
-        try {
-          await shoppingListService.addShoppingListItem(item);
-          addBetsyMessage(`Done! I've added "${item}" to your shopping list.`, { 
-            type: 'shopping_list', 
-            details: `Added: ${item}`, 
-            success: true 
-          });
-        } catch (e) {
-          addBetsyMessage(`I couldn't add "${item}" to the list. Please try again.`, {
-            type: 'shopping_list',
-            details: `Failed to add: ${item}`,
-            success: false
-          });
-        }
-        return;
-      }
-    }
-
-    // Meal planning commands
-    if (text.includes('breakfast') || text.includes('lunch') || text.includes('dinner') || text.includes('snack')) {
-      const mealMatch = text.match(/(breakfast|lunch|dinner|snack)/i);
-      const mealType = mealMatch ? mealMatch[1] : 'meal';
-      
-      let food = text
-        .replace(/^(add|set|plan|schedule|put)\s+/i, '')
-        .replace(/\s+(for|as)\s+(breakfast|lunch|dinner|snack).*/i, '')
-        .trim();
-
-      const dateMatch = text.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)/i);
-      const dateStr = dateMatch ? dateMatch[1] : 'today';
-
-      if (food) {
-        // Store in sessionStorage for meal planning page
-        sessionStorage.setItem('pendingMeal', JSON.stringify({ food, mealType, dateStr }));
-        addBetsyMessage(`I'll add "${food}" for ${mealType} on ${dateStr}. Taking you to the meal planner!`, {
-          type: 'meal_plan',
-          details: `${food} for ${mealType} on ${dateStr}`,
-          success: true
-        });
-        setTimeout(() => navigate('/meal-planning'), 500);
-        return;
-      }
-    }
-
-    // Help
-    if (text.includes('help') || text.includes('what can you do')) {
-      addBetsyMessage(
-        "Here's what I can help you with:\n\n" +
-        "📝 **Shopping List**\n" +
-        "• \"Add milk to shopping list\"\n" +
-        "• \"Add eggs\"\n\n" +
-        "🍳 **Meal Planning**\n" +
-        "• \"Add pancakes for breakfast Saturday\"\n" +
-        "• \"Plan pasta for dinner tomorrow\"\n\n" +
-        "🧭 **Navigation**\n" +
-        "• \"Go to recipes\"\n" +
-        "• \"Show me the shopping list\"\n" +
-        "• \"Open meal planning\"\n\n" +
-        "Just type or use voice!"
-      );
-      return;
-    }
-
-    // Clear history
-    if (text.includes('clear') && text.includes('history')) {
+    // Clear history is handled locally (no LLM needed)
+    if (text.toLowerCase().includes('clear') && text.toLowerCase().includes('history')) {
       setMessages([]);
       localStorage.removeItem(STORAGE_KEY);
       addBetsyMessage("I've cleared our conversation history. Fresh start!");
       return;
     }
 
-    // Unrecognized
-    addBetsyMessage(
-      `I'm not sure how to help with "${text}". Try saying "help" to see what I can do!`
-    );
+    // Use LLM to interpret the command
+    const interpretation = await betsyService.interpret(text);
+    console.log('[BetsyPage] Interpretation:', interpretation);
+
+    // Execute based on intent
+    await executeIntent(interpretation);
+  };
+
+  const executeIntent = async (interpretation: BetsyInterpretation) => {
+    const { intent, entities, response, confidence } = interpretation;
+
+    switch (intent) {
+      case 'add_shopping_item':
+        if (entities.items && entities.items.length > 0) {
+          try {
+            const addedItems: string[] = [];
+            for (const item of entities.items) {
+              const itemText = formatShoppingItem(item);
+              await shoppingListService.addShoppingListItem(itemText);
+              addedItems.push(itemText);
+            }
+            addBetsyMessage(response || `Done! I've added ${addedItems.join(', ')} to your shopping list.`, {
+              type: 'shopping_list',
+              details: `Added: ${addedItems.join(', ')}`,
+              success: true
+            });
+          } catch (e) {
+            addBetsyMessage(`I had trouble adding items to the list. Please try again.`, {
+              type: 'shopping_list',
+              details: 'Failed to add items',
+              success: false
+            });
+          }
+        } else {
+          addBetsyMessage(response || "I couldn't identify what to add. Please try again.");
+        }
+        break;
+
+      case 'navigate':
+        const destinations: Record<string, { path: string; label: string }> = {
+          recipes: { path: '/recipes', label: 'Recipes' },
+          shopping_list: { path: '/shopping-lists', label: 'Shopping List' },
+          meal_planning: { path: '/meal-planning', label: 'Meal Planning' }
+        };
+        const dest = destinations[entities.destination || ''];
+        if (dest) {
+          addBetsyMessage(response || `Taking you to ${dest.label}!`, {
+            type: 'navigate',
+            details: dest.label,
+            success: true
+          });
+          setTimeout(() => navigate(dest.path), 500);
+        } else {
+          addBetsyMessage("I'm not sure where you want to go. Try 'recipes', 'shopping list', or 'meal planning'.");
+        }
+        break;
+
+      case 'add_meal':
+        if (entities.food && entities.mealType) {
+          sessionStorage.setItem('pendingMeal', JSON.stringify({
+            food: entities.food,
+            mealType: entities.mealType,
+            dateStr: entities.day || 'today'
+          }));
+          addBetsyMessage(response || `I'll add "${entities.food}" for ${entities.mealType}. Taking you to the meal planner!`, {
+            type: 'meal_plan',
+            details: `${entities.food} for ${entities.mealType}${entities.day ? ` on ${entities.day}` : ''}`,
+            success: true
+          });
+          setTimeout(() => navigate('/meal-planning'), 500);
+        } else {
+          addBetsyMessage("I need to know what food and which meal. Try 'add pancakes for breakfast'.");
+        }
+        break;
+
+      case 'help':
+        addBetsyMessage(
+          "Here's what I can help you with:\n\n" +
+          "🛒 **Shopping List**\n" +
+          "• \"Add a gallon of milk\"\n" +
+          "• \"Put eggs, butter, and bread on the list\"\n" +
+          "• \"I need 2 dozen eggs\"\n\n" +
+          "🍳 **Meal Planning**\n" +
+          "• \"Plan pancakes for breakfast Saturday\"\n" +
+          "• \"Add pasta for dinner tomorrow\"\n\n" +
+          "🧭 **Navigation**\n" +
+          "• \"Go to recipes\"\n" +
+          "• \"Show me my shopping list\"\n" +
+          "• \"Open meal planning\"\n\n" +
+          "Just type or tap the microphone!"
+        );
+        break;
+
+      case 'greeting':
+        addBetsyMessage(response || "Hello! I'm Betsy, your kitchen assistant. How can I help you today?");
+        break;
+
+      case 'unknown':
+      default:
+        addBetsyMessage(response || `I'm not sure how to help with that. Try saying "help" to see what I can do!`);
+        break;
+    }
+  };
+
+  const formatShoppingItem = (item: { name: string; quantity?: string; unit?: string }): string => {
+    if (item.quantity && item.unit) {
+      return `${item.quantity} ${item.unit} ${item.name}`;
+    } else if (item.quantity) {
+      return `${item.quantity} ${item.name}`;
+    }
+    return item.name;
   };
 
   const toggleListening = () => {

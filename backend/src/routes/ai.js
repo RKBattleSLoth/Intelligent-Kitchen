@@ -8,6 +8,7 @@ const { body, validationResult } = require('express-validator');
 const RecipeAgent = require('../services/ai/agents/RecipeAgent');
 const RecipeUrlExtractor = require('../services/ai/RecipeUrlExtractor');
 const RequestRouter = require('../services/ai/RequestRouter');
+const BetsyAgent = require('../services/ai/BetsyAgent');
 const { parseIngredientsFromInstructions } = require('../utils/ingredientParser');
 
 const router = express.Router();
@@ -16,6 +17,7 @@ const router = express.Router();
 const recipeAgent = new RecipeAgent();
 const recipeUrlExtractor = new RecipeUrlExtractor();
 const requestRouter = new RequestRouter();
+const betsyAgent = new BetsyAgent();
 
 // Mock authentication for now (replace with real auth later)
 const mockAuth = (req, res, next) => {
@@ -235,6 +237,44 @@ router.post('/extract-ingredients', [
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+/**
+ * Betsy Assistant - Interpret natural language commands
+ */
+router.post('/betsy-interpret', [
+  body('input').notEmpty().withMessage('User input is required'),
+  body('context').optional().isObject()
+], async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: errors.array()
+      });
+    }
+
+    const { input, context = {} } = req.body;
+    const userId = req.user.id;
+
+    console.log(`API: Betsy interpreting: "${input}"`);
+
+    const result = await betsyAgent.interpret(input, { ...context, userId });
+
+    res.json({
+      ...result,
+      processingTimeMs: Date.now() - startTime
+    });
+  } catch (error) {
+    console.error('Betsy interpretation error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to interpret command'
     });
   }
 });
