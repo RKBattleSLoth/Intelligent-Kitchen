@@ -8,7 +8,8 @@ const OpenRouterClient = require('./OpenRouterClient');
 class BetsyAgent {
   constructor() {
     this.client = new OpenRouterClient();
-    this.model = process.env.OPENROUTER_BETSY_MODEL || 'anthropic/claude-3-haiku-20240307';
+    // Use claude-3-5-haiku (the current fast model) or fall back to claude-3.5-sonnet
+    this.model = process.env.OPENROUTER_BETSY_MODEL || 'anthropic/claude-3-5-haiku-20241022';
   }
 
   /**

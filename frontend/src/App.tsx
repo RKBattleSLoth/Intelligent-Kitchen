@@ -6,6 +6,7 @@ import { RecipeForm } from './components/recipes/RecipeForm'
 import { MealPlanningPage } from './pages/meal-planning/MealPlanningPage'
 import { ShoppingListPage } from './pages/shopping-lists/ShoppingListPage'
 import { BetsyPage } from './pages/assistant/BetsyPage'
+import { BetsyButton } from './components/BetsyChat'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
@@ -164,7 +165,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     React.createElement('main', {
       key: 'main',
       style: { padding: isMobile ? '1rem' : '2rem' }
-    }, children)
+    }, children),
+    
+    // Floating Betsy Button (only show on pages other than Betsy's dedicated page)
+    location.pathname !== '/' && React.createElement(BetsyButton, { key: 'betsy-button' })
   ])
 }
 
