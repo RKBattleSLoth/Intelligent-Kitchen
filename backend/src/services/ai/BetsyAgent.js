@@ -87,14 +87,17 @@ AVAILABLE INTENTS:
    
 5. "clear_shopping_list" - Clear all items from shopping list
    entities: {}
+
+6. "clear_meals" - Clear/delete meals from the meal plan
+   entities: { timeRange: "today" | "this_week" | "tomorrow" | "all", mealType?: "breakfast" | "lunch" | "dinner" | "snack" | "all" }
    
-6. "help" - User needs help or instructions
+7. "help" - User needs help or instructions
    entities: {}
    
-7. "greeting" - User is saying hello or starting conversation
+8. "greeting" - User is saying hello or starting conversation
    entities: {}
    
-8. "unknown" - Cannot determine intent
+9. "unknown" - Cannot determine intent
    entities: {}
 
 RESPONSE FORMAT (JSON only, no markdown):
@@ -111,6 +114,9 @@ EXAMPLES:
 - "show me recipes" → navigate with destination: "recipes"
 - "plan pancakes for breakfast saturday" → add_meal with food: "pancakes", mealType: "breakfast", day: "saturday"
 - "I need bread, 2 dozen eggs, and a pound of cheese" → add_shopping_item with items: [{ name: "bread" }, { name: "eggs", quantity: "2", unit: "dozen" }, { name: "cheese", quantity: "1", unit: "pound" }]
+- "clear all meals for this week" → clear_meals with timeRange: "this_week"
+- "delete today's meals" → clear_meals with timeRange: "today"
+- "remove all breakfast entries" → clear_meals with timeRange: "all", mealType: "breakfast"
 
 Now interpret the user input and respond with JSON only:`;
   }
@@ -156,6 +162,7 @@ Now interpret the user input and respond with JSON only:`;
       add_meal: "I'll add that to your meal plan.",
       remove_shopping_item: "I'll remove that from your list.",
       clear_shopping_list: "I'll clear your shopping list.",
+      clear_meals: "I'll clear those meals from your plan.",
       help: "I can help you manage shopping lists, plan meals, and navigate the app.",
       greeting: "Hello! How can I help you in the kitchen today?",
       unknown: "I'm not sure what you mean. Try saying 'help' for options."
@@ -210,6 +217,24 @@ Now interpret the user input and respond with JSON only:`;
         entities: { destination: 'shopping_list' },
         confidence: 0.7,
         response: "Here's your shopping list!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Clear meals pattern (check before navigate to meal planning)
+    if ((text.includes('clear') || text.includes('delete') || text.includes('remove')) && 
+        (text.includes('meal') || text.includes('plan'))) {
+      let timeRange = 'this_week';
+      if (text.includes('today')) timeRange = 'today';
+      else if (text.includes('tomorrow')) timeRange = 'tomorrow';
+      else if (text.includes('all')) timeRange = 'all';
+      
+      return {
+        success: true,
+        intent: 'clear_meals',
+        entities: { timeRange },
+        confidence: 0.7,
+        response: `I'll clear the meals for ${timeRange.replace('_', ' ')}.`,
         metadata: { method: 'fallback' }
       };
     }

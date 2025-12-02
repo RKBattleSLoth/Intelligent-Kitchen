@@ -206,6 +206,41 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'clear_meals':
+        if (entities.timeRange) {
+          try {
+            const result = await betsyService.clearMeals(entities.timeRange);
+            if (result.success) {
+              const timeLabel = entities.timeRange.replace('_', ' ');
+              addBetsyMessage(
+                result.deletedCount > 0 
+                  ? `Done! I've cleared ${result.deletedCount} meal${result.deletedCount === 1 ? '' : 's'} for ${timeLabel}.`
+                  : `There were no meals to clear for ${timeLabel}.`,
+                {
+                  type: 'meal_plan',
+                  details: `Cleared ${result.deletedCount} meals`,
+                  success: true
+                }
+              );
+            } else {
+              addBetsyMessage(`I had trouble clearing the meals: ${result.error}`, {
+                type: 'meal_plan',
+                details: 'Failed to clear meals',
+                success: false
+              });
+            }
+          } catch (e) {
+            addBetsyMessage("I couldn't clear the meals. Please try again.", {
+              type: 'meal_plan',
+              details: 'Error clearing meals',
+              success: false
+            });
+          }
+        } else {
+          addBetsyMessage("I need to know which meals to clear. Try 'clear meals for this week' or 'clear today's meals'.");
+        }
+        break;
+
       case 'help':
         addBetsyMessage(
           "Here's what I can help you with:\n\n" +
@@ -215,7 +250,8 @@ export const BetsyPage: React.FC = () => {
           "• \"I need 2 dozen eggs\"\n\n" +
           "🍳 **Meal Planning**\n" +
           "• \"Plan pancakes for breakfast Saturday\"\n" +
-          "• \"Add pasta for dinner tomorrow\"\n\n" +
+          "• \"Add pasta for dinner tomorrow\"\n" +
+          "• \"Clear all meals for this week\"\n\n" +
           "🧭 **Navigation**\n" +
           "• \"Go to recipes\"\n" +
           "• \"Show me my shopping list\"\n" +

@@ -369,6 +369,39 @@ router.delete('/entries/:entryId', authenticateToken, async (req, res) => {
   }
 });
 
+// Clear all meal entries in a date range
+router.delete('/entries/range/:startDate/:endDate', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.params;
+    const userId = req.user.id;
+
+    // Create dates at noon local time to avoid timezone issues
+    const localStartDate = new Date(startDate + 'T00:00:00');
+    const localEndDate = new Date(endDate + 'T23:59:59');
+
+    console.log(`Clearing meal entries from ${localStartDate} to ${localEndDate} for user ${userId}`);
+
+    const result = await query(
+      `DELETE FROM meal_plan_entries 
+       WHERE meal_date BETWEEN $1 AND $2 
+       AND meal_plan_id IN (SELECT id FROM meal_plans WHERE user_id = $3)
+       RETURNING id`,
+      [localStartDate, localEndDate, userId]
+    );
+
+    const deletedCount = result.rows.length;
+    console.log(`Deleted ${deletedCount} meal entries`);
+
+    res.json({ 
+      message: `Cleared ${deletedCount} meal entries`,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Clear meal entries error:', error);
+    res.status(500).json({ error: 'Failed to clear meal entries' });
+  }
+});
+
 // Get meal plan for a specific date range
 router.get('/range/:startDate/:endDate', authenticateToken, async (req, res) => {
   try {
