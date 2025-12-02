@@ -100,28 +100,37 @@ class BetsyService {
   }
 
   /**
-   * Clear meals for a date range
+   * Clear meals for a date range (uses local mealPlanService)
    */
-  async clearMeals(timeRange: string): Promise<{ success: boolean; deletedCount: number; error?: string }> {
+  clearMeals(timeRange: string): { success: boolean; deletedCount: number; error?: string } {
     try {
       const { startDate, endDate } = this.getDateRangeFromTimeRange(timeRange);
       
       console.log('[BetsyService] Clearing meals:', { timeRange, startDate, endDate });
       
-      const response = await axios.delete(
-        `${API_BASE_URL}/meal-plans/entries/range/${startDate}/${endDate}`
-      );
+      // Count meals before clearing
+      const mealsBefore = mealPlanService.getMealPlansForRange(startDate, endDate);
+      const countBefore = mealsBefore.reduce((sum, plan) => sum + plan.meals.length, 0);
+      
+      // Clear from local storage
+      if (timeRange === 'all') {
+        mealPlanService.clearAllMealPlans();
+      } else {
+        mealPlanService.clearMealPlansForWeek(startDate, endDate);
+      }
+      
+      console.log('[BetsyService] Cleared', countBefore, 'meals');
 
       return {
         success: true,
-        deletedCount: response.data.deletedCount || 0
+        deletedCount: countBefore
       };
     } catch (error: any) {
       console.error('[BetsyService] Clear meals error:', error);
       return {
         success: false,
         deletedCount: 0,
-        error: error.response?.data?.error || error.message
+        error: error.message
       };
     }
   }
