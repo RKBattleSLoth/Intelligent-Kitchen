@@ -10,7 +10,7 @@ export interface ShoppingItem {
 export interface BetsyInterpretation {
   success: boolean;
   intent: 'add_shopping_item' | 'navigate' | 'add_meal' | 'remove_shopping_item' | 
-          'clear_shopping_list' | 'clear_meals' | 'help' | 'greeting' | 'unknown';
+          'clear_shopping_list' | 'clear_meals' | 'generate_meals' | 'help' | 'greeting' | 'unknown';
   entities: {
     items?: ShoppingItem[];
     destination?: 'recipes' | 'shopping_list' | 'meal_planning';
@@ -18,7 +18,7 @@ export interface BetsyInterpretation {
     mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
     day?: string;
     itemName?: string;
-    timeRange?: 'today' | 'this_week' | 'tomorrow' | 'all';
+    timeRange?: 'today' | 'this_week' | 'tomorrow';
   };
   confidence: number;
   response: string;
@@ -104,6 +104,38 @@ class BetsyService {
       return {
         success: false,
         deletedCount: 0,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * Generate meals using AI for a date range
+   */
+  async generateMeals(timeRange: string): Promise<{ success: boolean; mealCount: number; error?: string }> {
+    try {
+      const { startDate, endDate } = this.getDateRangeFromTimeRange(timeRange);
+      
+      console.log('[BetsyService] Generating meals:', { timeRange, startDate, endDate });
+      
+      const response = await axios.post(`${API_BASE_URL}/meal-plans/generate`, {
+        startDate,
+        endDate,
+        mealTypes: ['breakfast', 'lunch', 'dinner'],
+        peopleCount: 4
+      });
+
+      const mealCount = response.data.mealPlan?.meals?.length || 0;
+      
+      return {
+        success: response.data.success !== false,
+        mealCount
+      };
+    } catch (error: any) {
+      console.error('[BetsyService] Generate meals error:', error);
+      return {
+        success: false,
+        mealCount: 0,
         error: error.response?.data?.error || error.message
       };
     }

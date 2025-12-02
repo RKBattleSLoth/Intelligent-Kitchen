@@ -241,6 +241,43 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'generate_meals':
+        if (entities.timeRange) {
+          try {
+            const timeLabel = entities.timeRange.replace('_', ' ');
+            addBetsyMessage(`Generating meals for ${timeLabel}... This may take a moment.`);
+            
+            const result = await betsyService.generateMeals(entities.timeRange);
+            if (result.success) {
+              addBetsyMessage(
+                result.mealCount > 0 
+                  ? `Done! I've created ${result.mealCount} meal${result.mealCount === 1 ? '' : 's'} for ${timeLabel}. Go to Meal Planning to see them!`
+                  : `The meal plan was generated. Go to Meal Planning to see the results!`,
+                {
+                  type: 'meal_plan',
+                  details: `Generated ${result.mealCount} meals`,
+                  success: true
+                }
+              );
+            } else {
+              addBetsyMessage(`I had trouble generating the meal plan: ${result.error}`, {
+                type: 'meal_plan',
+                details: 'Failed to generate meals',
+                success: false
+              });
+            }
+          } catch (e) {
+            addBetsyMessage("I couldn't generate the meal plan. Please try again or use the Meal Planning page directly.", {
+              type: 'meal_plan',
+              details: 'Error generating meals',
+              success: false
+            });
+          }
+        } else {
+          addBetsyMessage("I need to know the time range. Try 'generate meals for this week' or 'create meals for tomorrow'.");
+        }
+        break;
+
       case 'help':
         addBetsyMessage(
           "Here's what I can help you with:\n\n" +
@@ -249,8 +286,8 @@ export const BetsyPage: React.FC = () => {
           "• \"Put eggs, butter, and bread on the list\"\n" +
           "• \"I need 2 dozen eggs\"\n\n" +
           "🍳 **Meal Planning**\n" +
+          "• \"Generate meals for this week\"\n" +
           "• \"Plan pancakes for breakfast Saturday\"\n" +
-          "• \"Add pasta for dinner tomorrow\"\n" +
           "• \"Clear all meals for this week\"\n\n" +
           "🧭 **Navigation**\n" +
           "• \"Go to recipes\"\n" +

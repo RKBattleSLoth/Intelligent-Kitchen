@@ -89,15 +89,19 @@ AVAILABLE INTENTS:
    entities: {}
 
 6. "clear_meals" - Clear/delete meals from the meal plan
-   entities: { timeRange: "today" | "this_week" | "tomorrow" | "all", mealType?: "breakfast" | "lunch" | "dinner" | "snack" | "all" }
+   entities: { timeRange: "today" | "this_week" | "tomorrow", mealType?: "breakfast" | "lunch" | "dinner" | "snack" }
+   IMPORTANT: "this week" or "this full week" means timeRange: "this_week", NOT "all"
    
-7. "help" - User needs help or instructions
+7. "generate_meals" - Use AI to generate/create a meal plan
+   entities: { timeRange: "today" | "this_week" | "tomorrow" }
+   
+8. "help" - User needs help or instructions
    entities: {}
    
-8. "greeting" - User is saying hello or starting conversation
+9. "greeting" - User is saying hello or starting conversation
    entities: {}
    
-9. "unknown" - Cannot determine intent
+10. "unknown" - Cannot determine intent
    entities: {}
 
 RESPONSE FORMAT (JSON only, no markdown):
@@ -115,8 +119,12 @@ EXAMPLES:
 - "plan pancakes for breakfast saturday" → add_meal with food: "pancakes", mealType: "breakfast", day: "saturday"
 - "I need bread, 2 dozen eggs, and a pound of cheese" → add_shopping_item with items: [{ name: "bread" }, { name: "eggs", quantity: "2", unit: "dozen" }, { name: "cheese", quantity: "1", unit: "pound" }]
 - "clear all meals for this week" → clear_meals with timeRange: "this_week"
+- "clear all meals this week" → clear_meals with timeRange: "this_week" (NOT "all")
 - "delete today's meals" → clear_meals with timeRange: "today"
-- "remove all breakfast entries" → clear_meals with timeRange: "all", mealType: "breakfast"
+- "remove all breakfast entries this week" → clear_meals with timeRange: "this_week", mealType: "breakfast"
+- "use the smart meal planner to create meals for this week" → generate_meals with timeRange: "this_week"
+- "generate meals for the full week" → generate_meals with timeRange: "this_week"
+- "plan my meals for tomorrow" → generate_meals with timeRange: "tomorrow"
 
 Now interpret the user input and respond with JSON only:`;
   }
@@ -163,6 +171,7 @@ Now interpret the user input and respond with JSON only:`;
       remove_shopping_item: "I'll remove that from your list.",
       clear_shopping_list: "I'll clear your shopping list.",
       clear_meals: "I'll clear those meals from your plan.",
+      generate_meals: "I'll generate a meal plan for you!",
       help: "I can help you manage shopping lists, plan meals, and navigate the app.",
       greeting: "Hello! How can I help you in the kitchen today?",
       unknown: "I'm not sure what you mean. Try saying 'help' for options."
@@ -227,7 +236,7 @@ Now interpret the user input and respond with JSON only:`;
       let timeRange = 'this_week';
       if (text.includes('today')) timeRange = 'today';
       else if (text.includes('tomorrow')) timeRange = 'tomorrow';
-      else if (text.includes('all')) timeRange = 'all';
+      // "this week" or "full week" should be this_week, not checking for "all" alone
       
       return {
         success: true,
@@ -235,6 +244,24 @@ Now interpret the user input and respond with JSON only:`;
         entities: { timeRange },
         confidence: 0.7,
         response: `I'll clear the meals for ${timeRange.replace('_', ' ')}.`,
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Generate meals pattern (check before navigate to meal planning)
+    if ((text.includes('generate') || text.includes('create') || text.includes('smart meal planner') || 
+         text.includes('make meals') || text.includes('plan meals')) && 
+        (text.includes('meal') || text.includes('week') || text.includes('plan'))) {
+      let timeRange = 'this_week';
+      if (text.includes('today')) timeRange = 'today';
+      else if (text.includes('tomorrow')) timeRange = 'tomorrow';
+      
+      return {
+        success: true,
+        intent: 'generate_meals',
+        entities: { timeRange },
+        confidence: 0.7,
+        response: `I'll generate meals for ${timeRange.replace('_', ' ')}!`,
         metadata: { method: 'fallback' }
       };
     }
