@@ -253,8 +253,10 @@ Now interpret the user input and respond with JSON only:`;
     
     console.log('⚠️ [BETSY_AGENT] Using fallback interpretation');
 
-    // Check for add shopping item patterns first (before navigation)
-    if (text.match(/^(add|put|get|buy|need|pick up)\b/i) && !text.match(/\b(breakfast|lunch|dinner|snack)\b/i)) {
+    // Check for add shopping item patterns (but NOT recipes or meals)
+    if (text.match(/^(add|put|get|buy|need|pick up)\b/i) && 
+        !text.match(/\b(breakfast|lunch|dinner|snack)\b/i) &&
+        !text.match(/\b(recipe|recipes)\b/i)) {
       const itemText = text
         .replace(/^(add|put|get|buy|need|pick up)\s+/i, '')
         .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?(list|cart).*$/i, '')
