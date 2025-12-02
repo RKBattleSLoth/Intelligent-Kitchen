@@ -312,6 +312,152 @@ Now interpret the user input and respond with JSON only:`;
       };
     }
 
+    // Swap meals pattern
+    if (text.includes('swap')) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+      
+      let day1 = null, mealType1 = null, day2 = null, mealType2 = null;
+      
+      for (const day of days) {
+        if (text.includes(day)) {
+          if (!day1) day1 = day;
+          else if (!day2) day2 = day;
+        }
+      }
+      for (const meal of mealTypes) {
+        if (text.includes(meal)) {
+          if (!mealType1) mealType1 = meal;
+          else if (!mealType2) mealType2 = meal;
+        }
+      }
+      
+      // If only one meal type mentioned, use it for both
+      if (mealType1 && !mealType2) mealType2 = mealType1;
+      
+      if (day1 && day2 && mealType1 && mealType2) {
+        return {
+          success: true,
+          intent: 'swap_meals',
+          entities: { day1, mealType1, day2, mealType2 },
+          confidence: 0.7,
+          response: `I'll swap ${day1} ${mealType1} with ${day2} ${mealType2}!`,
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Move meal pattern
+    if (text.includes('move')) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'today', 'tomorrow'];
+      const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+      
+      let fromDay = null, fromMealType = null, toDay = null, toMealType = null;
+      
+      // Find days in order
+      for (const day of days) {
+        const idx = text.indexOf(day);
+        if (idx !== -1) {
+          if (!fromDay) fromDay = day;
+          else if (!toDay && text.indexOf(day, idx + 1) !== -1) toDay = day;
+          else if (!toDay) toDay = day;
+        }
+      }
+      
+      // Find meal types
+      for (const meal of mealTypes) {
+        if (text.includes(meal)) {
+          if (!fromMealType) fromMealType = meal;
+          else if (!toMealType) toMealType = meal;
+        }
+      }
+      
+      if (fromDay && fromMealType && toDay && toMealType) {
+        return {
+          success: true,
+          intent: 'move_meal',
+          entities: { fromDay, fromMealType, toDay, toMealType },
+          confidence: 0.7,
+          response: `I'll move ${fromDay} ${fromMealType} to ${toDay} ${toMealType}!`,
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Import recipe from URL
+    if (text.includes('import') && (text.includes('http://') || text.includes('https://'))) {
+      const urlMatch = text.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        return {
+          success: true,
+          intent: 'import_recipe',
+          entities: { url: urlMatch[0] },
+          confidence: 0.8,
+          response: "I'll import that recipe for you!",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Add recipe ingredients to shopping list
+    if ((text.includes('add') && text.includes('ingredients')) || 
+        (text.includes('add') && text.includes('shopping') && text.includes('recipe'))) {
+      // Extract recipe name - everything after "add" and before "ingredients" or "to"
+      const recipeMatch = text.match(/add\s+(?:the\s+)?(.+?)\s+(?:ingredients|to)/i);
+      if (recipeMatch) {
+        return {
+          success: true,
+          intent: 'add_recipe_to_shopping_list',
+          entities: { recipeName: recipeMatch[1].trim() },
+          confidence: 0.7,
+          response: "I'll add those ingredients to your shopping list!",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Consolidate shopping list
+    if (text.includes('consolidate') || (text.includes('merge') && text.includes('list'))) {
+      return {
+        success: true,
+        intent: 'consolidate_shopping_list',
+        entities: {},
+        confidence: 0.8,
+        response: "I'll consolidate your shopping list!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Search recipes
+    if ((text.includes('search') || text.includes('find')) && text.includes('recipe')) {
+      const queryMatch = text.match(/(?:search|find)\s+(?:my\s+)?(?:recipes?\s+)?(?:for\s+)?(.+)/i);
+      if (queryMatch) {
+        return {
+          success: true,
+          intent: 'search_recipes',
+          entities: { query: queryMatch[1].replace(/recipes?/gi, '').trim() },
+          confidence: 0.7,
+          response: "Let me search your recipes!",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Delete recipe
+    if ((text.includes('delete') || text.includes('remove')) && text.includes('recipe')) {
+      const nameMatch = text.match(/(?:delete|remove)\s+(?:the\s+)?(.+?)\s+recipe/i);
+      if (nameMatch) {
+        return {
+          success: true,
+          intent: 'delete_recipe',
+          entities: { recipeName: nameMatch[1].trim() },
+          confidence: 0.7,
+          response: "I'll delete that recipe.",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
     if (text.includes('meal') || text.includes('plan')) {
       return {
         success: true,
