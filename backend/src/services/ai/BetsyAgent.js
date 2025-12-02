@@ -273,8 +273,63 @@ Now interpret the user input and respond with JSON only:`;
       }
     }
 
-    // Navigation patterns
-    if (text.includes('recipe')) {
+    // Import recipe from URL (check before generic recipe navigation)
+    if ((text.includes('import') || text.includes('add')) && 
+        (text.includes('http://') || text.includes('https://') || text.includes('.com') || text.includes('.org'))) {
+      const urlMatch = text.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        return {
+          success: true,
+          intent: 'import_recipe',
+          entities: { url: urlMatch[0] },
+          confidence: 0.8,
+          response: "I'll import that recipe for you!",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Search for recipe online / web search (check before generic recipe navigation)
+    if ((text.includes('search') || text.includes('find') || text.includes('look up') || text.includes('look for')) && 
+        (text.includes('recipe') || text.includes('from')) &&
+        (text.includes('online') || text.includes('web') || text.includes('internet') || 
+         text.includes('half baked') || text.includes('allrecipes') || text.includes('food network') ||
+         text.includes('bon appetit') || text.includes('serious eats'))) {
+      const queryMatch = text.match(/(?:for|recipe\s+for)\s+(.+?)(?:\s+from|\s+on|\s+online|$)/i);
+      return {
+        success: true,
+        intent: 'web_search_recipe',
+        entities: { 
+          query: queryMatch ? queryMatch[1].trim() : text.replace(/search|find|look|up|for|recipe|online|web/gi, '').trim(),
+          source: text.match(/(half baked harvest|allrecipes|food network|bon appetit|serious eats)/i)?.[1] || null
+        },
+        confidence: 0.7,
+        response: "I'll search for that recipe online!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Add/create new recipe manually (check before generic recipe navigation)
+    if ((text.includes('add') || text.includes('create') || text.includes('make') || text.includes('new')) && 
+        text.includes('recipe') && 
+        !text.includes('import') && !text.includes('http')) {
+      // Extract recipe name if provided
+      const nameMatch = text.match(/(?:recipe\s+for|new\s+recipe\s+for|add\s+(?:a\s+)?(?:new\s+)?recipe\s+for|create\s+(?:a\s+)?recipe\s+for)\s+(.+)/i) ||
+                        text.match(/(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?(.+?)\s+recipe/i);
+      return {
+        success: true,
+        intent: 'create_recipe',
+        entities: { 
+          recipeName: nameMatch ? nameMatch[1].trim() : null
+        },
+        confidence: 0.7,
+        response: nameMatch ? `I'll help you create a recipe for ${nameMatch[1].trim()}!` : "I'll help you create a new recipe!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Navigation patterns - generic recipe page (only if no specific action detected)
+    if (text.includes('recipe') && (text.includes('show') || text.includes('view') || text.includes('go to') || text.includes('open') || text.match(/^recipes?$/i))) {
       return {
         success: true,
         intent: 'navigate',

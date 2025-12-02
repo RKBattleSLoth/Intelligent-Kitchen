@@ -463,6 +463,33 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'create_recipe':
+        addBetsyMessage(
+          entities.recipeName 
+            ? `Let's create a recipe for ${entities.recipeName}! I'll take you to the recipes page where you can add all the details.`
+            : "I'll take you to the recipes page to create a new recipe!",
+          { type: 'recipe', details: 'Create recipe', success: true }
+        );
+        sessionStorage.setItem('openRecipeForm', 'true');
+        if (entities.recipeName) {
+          sessionStorage.setItem('newRecipeName', entities.recipeName);
+        }
+        setTimeout(() => navigate('/recipes'), 500);
+        break;
+
+      case 'web_search_recipe':
+        {
+          const searchQuery = entities.query || entities.recipeName || 'recipe';
+          const source = entities.source ? ` site:${entities.source.toLowerCase().replace(/\s+/g, '')}` : '';
+          addBetsyMessage(
+            `I'll search for "${searchQuery}" recipes online. Once you find one you like, come back and share the URL - I'll import it for you!`,
+            { type: 'recipe', details: 'Web search', success: true }
+          );
+          const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery + ' recipe' + source)}`;
+          window.open(searchUrl, '_blank');
+        }
+        break;
+
       case 'help':
         addBetsyMessage(
           "Here's what I can help you with:\n\n" +

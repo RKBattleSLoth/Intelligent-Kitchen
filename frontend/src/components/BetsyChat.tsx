@@ -206,6 +206,34 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         }
         break;
 
+      case 'create_recipe':
+        // Navigate to recipes page and trigger the add recipe modal
+        addBetsyMessage(
+          entities.recipeName 
+            ? `Let's create a recipe for ${entities.recipeName}! I'll take you to the recipes page.`
+            : "I'll take you to the recipes page to create a new recipe!",
+          { type: 'recipe', details: 'Create recipe', success: true }
+        );
+        sessionStorage.setItem('openRecipeForm', 'true');
+        if (entities.recipeName) {
+          sessionStorage.setItem('newRecipeName', entities.recipeName);
+        }
+        setTimeout(() => { navigate('/recipes'); onClose(); }, 500);
+        break;
+
+      case 'web_search_recipe':
+        // Search for recipe online and provide URL for import
+        const searchQuery = entities.query || entities.recipeName || 'recipe';
+        const source = entities.source ? ` site:${entities.source.toLowerCase().replace(/\s+/g, '')}` : '';
+        addBetsyMessage(
+          `I'll search for "${searchQuery}" recipes online. Once you find one you like, share the URL and I'll import it for you!`,
+          { type: 'recipe', details: 'Web search', success: true }
+        );
+        // Open search in new tab
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery + ' recipe' + source)}`;
+        window.open(searchUrl, '_blank');
+        break;
+
       case 'add_recipe_to_shopping_list':
         if (entities.recipeName) {
           try {
