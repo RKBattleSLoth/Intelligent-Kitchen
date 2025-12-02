@@ -10,7 +10,10 @@ export interface ShoppingItem {
 export interface BetsyInterpretation {
   success: boolean;
   intent: 'add_shopping_item' | 'navigate' | 'add_meal' | 'remove_shopping_item' | 
-          'clear_shopping_list' | 'clear_meals' | 'generate_meals' | 'help' | 'greeting' | 'unknown';
+          'clear_shopping_list' | 'clear_meals' | 'generate_meals' | 'import_recipe' |
+          'search_recipe' | 'add_recipe_to_shopping_list' | 'consolidate_shopping_list' |
+          'move_meal' | 'swap_meals' | 'delete_recipe' | 'search_recipes' |
+          'help' | 'greeting' | 'unknown';
   entities: {
     items?: ShoppingItem[];
     destination?: 'recipes' | 'shopping_list' | 'meal_planning';
@@ -19,6 +22,19 @@ export interface BetsyInterpretation {
     day?: string;
     itemName?: string;
     timeRange?: 'today' | 'this_week' | 'tomorrow';
+    url?: string;
+    query?: string;
+    recipeName?: string;
+    category?: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
+    checkedOnly?: boolean;
+    fromDay?: string;
+    fromMealType?: string;
+    toDay?: string;
+    toMealType?: string;
+    day1?: string;
+    mealType1?: string;
+    day2?: string;
+    mealType2?: string;
   };
   confidence: number;
   response: string;

@@ -85,8 +85,8 @@ AVAILABLE INTENTS:
 4. "remove_shopping_item" - Remove item from shopping list
    entities: { itemName: string }
    
-5. "clear_shopping_list" - Clear all items from shopping list
-   entities: {}
+5. "clear_shopping_list" - Clear all items from shopping list OR clear checked/completed items
+   entities: { checkedOnly?: boolean }
 
 6. "clear_meals" - Clear/delete meals from the meal plan
    entities: { timeRange: "today" | "this_week" | "tomorrow", mealType?: "breakfast" | "lunch" | "dinner" | "snack" }
@@ -94,15 +94,39 @@ AVAILABLE INTENTS:
    
 7. "generate_meals" - Use AI to generate/create a meal plan
    entities: { timeRange: "today" | "this_week" | "tomorrow" }
+
+8. "import_recipe" - Import a recipe from a URL
+   entities: { url: string, category?: "Breakfast" | "Lunch" | "Dinner" | "Snack" }
+
+9. "search_recipe" - Search for recipes online by keyword and import
+   entities: { query: string, category?: "Breakfast" | "Lunch" | "Dinner" | "Snack" }
+
+10. "add_recipe_to_shopping_list" - Add all ingredients from a recipe to the shopping list
+    entities: { recipeName: string }
+
+11. "consolidate_shopping_list" - Merge duplicate items and combine quantities in shopping list
+    entities: {}
+
+12. "move_meal" - Move a meal from one slot to another
+    entities: { fromDay: string, fromMealType: string, toDay: string, toMealType: string }
+
+13. "swap_meals" - Swap two meals between slots
+    entities: { day1: string, mealType1: string, day2: string, mealType2: string }
+
+14. "delete_recipe" - Delete a recipe from the collection
+    entities: { recipeName: string }
+
+15. "search_recipes" - Search saved recipes by keyword
+    entities: { query: string }
    
-8. "help" - User needs help or instructions
-   entities: {}
+16. "help" - User needs help or instructions
+    entities: {}
    
-9. "greeting" - User is saying hello or starting conversation
-   entities: {}
+17. "greeting" - User is saying hello or starting conversation
+    entities: {}
    
-10. "unknown" - Cannot determine intent
-   entities: {}
+18. "unknown" - Cannot determine intent
+    entities: {}
 
 RESPONSE FORMAT (JSON only, no markdown):
 {
@@ -125,6 +149,19 @@ EXAMPLES:
 - "use the smart meal planner to create meals for this week" → generate_meals with timeRange: "this_week"
 - "generate meals for the full week" → generate_meals with timeRange: "this_week"
 - "plan my meals for tomorrow" → generate_meals with timeRange: "tomorrow"
+- "import recipe from https://example.com/recipe" → import_recipe with url: "https://example.com/recipe"
+- "find me a chicken parmesan recipe" → search_recipe with query: "chicken parmesan"
+- "search online for pasta recipes" → search_recipe with query: "pasta"
+- "add the spaghetti carbonara ingredients to my shopping list" → add_recipe_to_shopping_list with recipeName: "spaghetti carbonara"
+- "consolidate my shopping list" → consolidate_shopping_list
+- "merge duplicate items on my list" → consolidate_shopping_list
+- "move monday's breakfast to tuesday lunch" → move_meal with fromDay: "monday", fromMealType: "breakfast", toDay: "tuesday", toMealType: "lunch"
+- "swap tuesday dinner with wednesday dinner" → swap_meals with day1: "tuesday", mealType1: "dinner", day2: "wednesday", mealType2: "dinner"
+- "clear completed items from shopping list" → clear_shopping_list with checkedOnly: true
+- "remove checked items" → clear_shopping_list with checkedOnly: true
+- "delete the pancakes recipe" → delete_recipe with recipeName: "pancakes"
+- "search my recipes for chicken" → search_recipes with query: "chicken"
+- "find recipes with pasta" → search_recipes with query: "pasta"
 
 Now interpret the user input and respond with JSON only:`;
   }
@@ -172,7 +209,15 @@ Now interpret the user input and respond with JSON only:`;
       clear_shopping_list: "I'll clear your shopping list.",
       clear_meals: "I'll clear those meals from your plan.",
       generate_meals: "I'll generate a meal plan for you!",
-      help: "I can help you manage shopping lists, plan meals, and navigate the app.",
+      import_recipe: "I'll import that recipe for you!",
+      search_recipe: "Let me search for that recipe online!",
+      add_recipe_to_shopping_list: "I'll add those ingredients to your shopping list!",
+      consolidate_shopping_list: "I'll consolidate your shopping list and merge duplicates!",
+      move_meal: "I'll move that meal for you!",
+      swap_meals: "I'll swap those meals!",
+      delete_recipe: "I'll delete that recipe.",
+      search_recipes: "Let me search your recipes!",
+      help: "I can help you manage shopping lists, plan meals, import recipes, and more!",
       greeting: "Hello! How can I help you in the kitchen today?",
       unknown: "I'm not sure what you mean. Try saying 'help' for options."
     };

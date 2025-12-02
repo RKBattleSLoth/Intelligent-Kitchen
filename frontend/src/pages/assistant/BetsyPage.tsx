@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { voiceService } from '../../services/voiceService';
-import { shoppingListService } from '../../services/shoppingListService';
+import { shoppingListService, enhancedShoppingListService } from '../../services/shoppingListService';
 import { betsyService, BetsyInterpretation } from '../../services/betsyService';
+import { recipeService } from '../../services/recipeService';
+import { mealPlanService } from '../../services/mealPlanService';
 
 interface Message {
   id: string;
@@ -278,21 +280,209 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'import_recipe':
+        if (entities.url) {
+          try {
+            addBetsyMessage(`Importing recipe from ${entities.url}... This may take a moment.`);
+            const recipe = await recipeService.importRecipeFromUrl(entities.url, entities.category || 'Dinner');
+            addBetsyMessage(`Done! I've imported "${recipe.name}" to your recipes.`, {
+              type: 'recipe',
+              details: `Imported: ${recipe.name}`,
+              success: true
+            });
+          } catch (e: any) {
+            addBetsyMessage(`I couldn't import that recipe: ${e.message}`, {
+              type: 'recipe',
+              details: 'Failed to import recipe',
+              success: false
+            });
+          }
+        } else {
+          addBetsyMessage("I need a URL to import a recipe. Try 'import recipe from https://...'");
+        }
+        break;
+
+      case 'search_recipe':
+        if (entities.query) {
+          addBetsyMessage(`I found some recipes for "${entities.query}"! Unfortunately, I can't search the web directly yet. Please find a recipe URL and say "import recipe from [URL]" to add it.`);
+        } else {
+          addBetsyMessage("What recipe would you like me to search for?");
+        }
+        break;
+
+      case 'add_recipe_to_shopping_list':
+        if (entities.recipeName) {
+          try {
+            const recipes = await recipeService.getAllRecipes();
+            const recipe = recipes.find(r => 
+              r.name.toLowerCase().includes(entities.recipeName!.toLowerCase())
+            );
+            if (recipe) {
+              const ingredients = await recipeService.extractIngredients(recipe.instructions, recipe.name);
+              if (ingredients.length > 0) {
+                await shoppingListService.addIngredientsToList(ingredients);
+                addBetsyMessage(`Done! I've added ${ingredients.length} ingredients from "${recipe.name}" to your shopping list.`, {
+                  type: 'shopping_list',
+                  details: `Added ${ingredients.length} ingredients from ${recipe.name}`,
+                  success: true
+                });
+              } else {
+                addBetsyMessage(`I couldn't extract ingredients from "${recipe.name}".`);
+              }
+            } else {
+              addBetsyMessage(`I couldn't find a recipe called "${entities.recipeName}". Try checking the Recipes page.`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble adding the ingredients. Please try again.", {
+              type: 'shopping_list',
+              details: 'Failed to add ingredients',
+              success: false
+            });
+          }
+        } else {
+          addBetsyMessage("Which recipe's ingredients should I add to the shopping list?");
+        }
+        break;
+
+      case 'consolidate_shopping_list':
+        try {
+          const consolidated = await enhancedShoppingListService.consolidateItems();
+          addBetsyMessage(`Done! I've consolidated your shopping list. You now have ${consolidated.length} unique items.`, {
+            type: 'shopping_list',
+            details: `Consolidated to ${consolidated.length} items`,
+            success: true
+          });
+        } catch (e) {
+          addBetsyMessage("I had trouble consolidating the list. Please try again.", {
+            type: 'shopping_list',
+            details: 'Failed to consolidate',
+            success: false
+          });
+        }
+        break;
+
+      case 'move_meal':
+        if (entities.fromDay && entities.fromMealType && entities.toDay && entities.toMealType) {
+          try {
+            const fromDate = getDateFromDayName(entities.fromDay);
+            const toDate = getDateFromDayName(entities.toDay);
+            const fromMeal = mealPlanService.getPlannedMeal(fromDate, capitalize(entities.fromMealType));
+            
+            if (fromMeal) {
+              mealPlanService.removePlannedMeal(fromDate, capitalize(entities.fromMealType));
+              mealPlanService.addPlannedMeal(toDate, capitalize(entities.toMealType), fromMeal.recipe);
+              addBetsyMessage(`Done! I've moved ${fromMeal.recipe.name} from ${entities.fromDay} ${entities.fromMealType} to ${entities.toDay} ${entities.toMealType}.`, {
+                type: 'meal_plan',
+                details: `Moved meal`,
+                success: true
+              });
+            } else {
+              addBetsyMessage(`I couldn't find a meal for ${entities.fromDay} ${entities.fromMealType}.`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble moving that meal. Please try again.");
+          }
+        } else {
+          addBetsyMessage("I need to know where to move the meal from and to. Try 'move Monday breakfast to Tuesday lunch'.");
+        }
+        break;
+
+      case 'swap_meals':
+        if (entities.day1 && entities.mealType1 && entities.day2 && entities.mealType2) {
+          try {
+            const date1 = getDateFromDayName(entities.day1);
+            const date2 = getDateFromDayName(entities.day2);
+            const meal1 = mealPlanService.getPlannedMeal(date1, capitalize(entities.mealType1));
+            const meal2 = mealPlanService.getPlannedMeal(date2, capitalize(entities.mealType2));
+            
+            if (meal1 && meal2) {
+              mealPlanService.removePlannedMeal(date1, capitalize(entities.mealType1));
+              mealPlanService.removePlannedMeal(date2, capitalize(entities.mealType2));
+              mealPlanService.addPlannedMeal(date1, capitalize(entities.mealType1), meal2.recipe);
+              mealPlanService.addPlannedMeal(date2, capitalize(entities.mealType2), meal1.recipe);
+              addBetsyMessage(`Done! I've swapped ${meal1.recipe.name} with ${meal2.recipe.name}.`, {
+                type: 'meal_plan',
+                details: 'Swapped meals',
+                success: true
+              });
+            } else {
+              addBetsyMessage("I couldn't find meals in both slots to swap.");
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble swapping those meals. Please try again.");
+          }
+        } else {
+          addBetsyMessage("I need to know which meals to swap. Try 'swap Monday dinner with Tuesday dinner'.");
+        }
+        break;
+
+      case 'delete_recipe':
+        if (entities.recipeName) {
+          try {
+            const recipes = await recipeService.getAllRecipes();
+            const recipe = recipes.find(r => 
+              r.name.toLowerCase().includes(entities.recipeName!.toLowerCase())
+            );
+            if (recipe) {
+              await recipeService.deleteRecipe(recipe.id);
+              addBetsyMessage(`Done! I've deleted "${recipe.name}" from your recipes.`, {
+                type: 'recipe',
+                details: `Deleted: ${recipe.name}`,
+                success: true
+              });
+            } else {
+              addBetsyMessage(`I couldn't find a recipe called "${entities.recipeName}".`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble deleting that recipe. Please try again.");
+          }
+        } else {
+          addBetsyMessage("Which recipe would you like me to delete?");
+        }
+        break;
+
+      case 'search_recipes':
+        if (entities.query) {
+          try {
+            const recipes = await recipeService.getAllRecipes();
+            const matches = recipes.filter(r => 
+              r.name.toLowerCase().includes(entities.query!.toLowerCase()) ||
+              r.instructions.toLowerCase().includes(entities.query!.toLowerCase())
+            );
+            if (matches.length > 0) {
+              const recipeList = matches.slice(0, 5).map(r => `• ${r.name}`).join('\n');
+              addBetsyMessage(`I found ${matches.length} recipe${matches.length === 1 ? '' : 's'} matching "${entities.query}":\n\n${recipeList}${matches.length > 5 ? `\n\n...and ${matches.length - 5} more` : ''}`);
+            } else {
+              addBetsyMessage(`I couldn't find any recipes matching "${entities.query}".`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble searching recipes. Please try again.");
+          }
+        } else {
+          addBetsyMessage("What would you like me to search for in your recipes?");
+        }
+        break;
+
       case 'help':
         addBetsyMessage(
           "Here's what I can help you with:\n\n" +
           "🛒 **Shopping List**\n" +
           "• \"Add a gallon of milk\"\n" +
-          "• \"Put eggs, butter, and bread on the list\"\n" +
-          "• \"I need 2 dozen eggs\"\n\n" +
+          "• \"Add spaghetti carbonara ingredients to list\"\n" +
+          "• \"Consolidate my shopping list\"\n" +
+          "• \"Clear checked items\"\n\n" +
           "🍳 **Meal Planning**\n" +
           "• \"Generate meals for this week\"\n" +
-          "• \"Plan pancakes for breakfast Saturday\"\n" +
-          "• \"Clear all meals for this week\"\n\n" +
+          "• \"Move Monday breakfast to Tuesday\"\n" +
+          "• \"Swap Tuesday dinner with Wednesday dinner\"\n" +
+          "• \"Clear all meals this week\"\n\n" +
+          "📖 **Recipes**\n" +
+          "• \"Import recipe from [URL]\"\n" +
+          "• \"Search my recipes for chicken\"\n" +
+          "• \"Delete the pancakes recipe\"\n\n" +
           "🧭 **Navigation**\n" +
           "• \"Go to recipes\"\n" +
-          "• \"Show me my shopping list\"\n" +
-          "• \"Open meal planning\"\n\n" +
+          "• \"Show me my shopping list\"\n\n" +
           "Just type or tap the microphone!"
         );
         break;
@@ -315,6 +505,37 @@ export const BetsyPage: React.FC = () => {
       return `${item.quantity} ${item.name}`;
     }
     return item.name;
+  };
+
+  const capitalize = (str: string): string => {
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  };
+
+  const getDateFromDayName = (dayName: string): string => {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const today = new Date();
+    const todayDay = today.getDay();
+    const targetDay = days.indexOf(dayName.toLowerCase());
+    
+    if (targetDay === -1) {
+      // Handle "today", "tomorrow"
+      if (dayName.toLowerCase() === 'today') {
+        return today.toISOString().split('T')[0];
+      }
+      if (dayName.toLowerCase() === 'tomorrow') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow.toISOString().split('T')[0];
+      }
+      return today.toISOString().split('T')[0];
+    }
+    
+    let daysUntil = targetDay - todayDay;
+    if (daysUntil < 0) daysUntil += 7;
+    
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysUntil);
+    return targetDate.toISOString().split('T')[0];
   };
 
   const toggleListening = () => {
