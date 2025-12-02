@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { Recipe } from './types/recipe'
 import { RecipeList } from './components/recipes/RecipeList'
 import { RecipeForm } from './components/recipes/RecipeForm'
 import { MealPlanningPage } from './pages/meal-planning/MealPlanningPage'
 import { ShoppingListPage } from './pages/shopping-lists/ShoppingListPage'
-import { voiceService, VoiceCommand } from './services/voiceService'
+import { BetsyPage } from './pages/assistant/BetsyPage'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
-  const navigate = useNavigate()
-  const [isListening, setIsListening] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [voiceTranscript, setVoiceTranscript] = useState('')
-  const [voiceError, setVoiceError] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -23,88 +18,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
-
-  useEffect(() => {
-    const unsubCommand = voiceService.onCommand((command: VoiceCommand) => {
-      setVoiceError(null)
-      setIsProcessing(true)
-      handleGlobalVoiceCommand(command)
-      setTimeout(() => setIsProcessing(false), 500)
-    })
-
-    const unsubResult = voiceService.onResult((result) => {
-      // Show transcript in real-time (interim results)
-      setVoiceTranscript(result.transcript)
-      if (result.isFinal) {
-        setIsListening(false)
-        // Keep final transcript visible longer
-        setTimeout(() => setVoiceTranscript(''), 4000)
-      }
-    })
-
-    const unsubError = voiceService.onError((msg) => {
-      setVoiceError(msg)
-      setIsListening(false)
-      setIsProcessing(false)
-    })
-
-    return () => {
-      unsubCommand()
-      unsubResult()
-      unsubError()
-      voiceService.stopListening()
-    }
-  }, [])
-
-  const handleGlobalVoiceCommand = (command: VoiceCommand) => {
-    switch (command.command) {
-      case 'plan_meals':
-        navigate('/meal-planning')
-        break
-      case 'view_recipes':
-        navigate('/recipes')
-        break
-      case 'view_shopping_list':
-        navigate('/shopping-lists')
-        break
-      case 'add_meal':
-        // Extract parameters: [food, mealType, dateStr]
-        const [food, mealType, dateStr] = command.parameters || []
-        if (food && mealType) {
-          // Store in sessionStorage for the meal planning page to pick up
-          sessionStorage.setItem('pendingMeal', JSON.stringify({ food, mealType, dateStr }))
-          voiceService.speak(`Adding ${food} for ${mealType}`)
-          navigate('/meal-planning')
-        }
-        break
-      case 'help':
-        voiceService.speak('You can say: Add cereal for breakfast Friday, Go to recipes, Go to shopping list, or Help')
-        break
-      case 'unrecognized':
-        voiceService.speak('Sorry, I did not understand that command. Say Help for options.')
-        break
-      default:
-        break
-    }
-  }
-
-  const toggleVoiceListening = () => {
-    if (isListening) {
-      voiceService.stopListening()
-      setIsListening(false)
-      setVoiceTranscript('')
-      return
-    }
-
-    const started = voiceService.startListening()
-    if (started) {
-      setIsListening(true)
-      setVoiceTranscript('')
-      setVoiceError(null)
-    } else {
-      setVoiceError('Speech recognition not supported')
-    }
-  }
 
   const navLinkStyle = (isActive: boolean) => ({
     color: isActive ? '#60a5fa' : 'white',
@@ -150,54 +63,35 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             gap: '0.5rem'
           }
         }, [
-          React.createElement('div', {
+          React.createElement(Link, {
             key: 'logo',
-            style: { fontSize: isMobile ? '1.25rem' : '1.5rem', fontWeight: 'bold' }
+            to: '/',
+            style: { 
+              fontSize: isMobile ? '1.25rem' : '1.5rem', 
+              fontWeight: 'bold',
+              color: '#f1f5f9',
+              textDecoration: 'none'
+            }
           }, '🍳 Intelligent Kitchen'),
-          // Mobile controls (hamburger + voice)
-          isMobile && React.createElement('div', {
-            key: 'mobile-controls',
-            style: { display: 'flex', gap: '0.5rem', alignItems: 'center' }
-          }, [
-            // Voice button (prominent on mobile)
-            React.createElement('button', {
-              key: 'voice-btn-mobile',
-              onClick: toggleVoiceListening,
-              style: {
-                background: isListening ? '#f97316' : '#6366f1',
-                color: 'white',
-                border: 'none',
-                padding: '0.75rem',
-                borderRadius: '50%',
-                cursor: 'pointer',
-                fontSize: '1.25rem',
-                minWidth: '48px',
-                minHeight: '48px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }
-            }, isListening ? '🛑' : '🎙️'),
-            // Hamburger menu button
-            React.createElement('button', {
-              key: 'hamburger',
-              onClick: () => setMobileMenuOpen(!mobileMenuOpen),
-              style: {
-                background: 'transparent',
-                color: 'white',
-                border: '1px solid #475569',
-                padding: '0.5rem',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                fontSize: '1.5rem',
-                minWidth: '48px',
-                minHeight: '48px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }
-            }, mobileMenuOpen ? '✕' : '☰')
-          ])
+          // Mobile hamburger
+          isMobile && React.createElement('button', {
+            key: 'hamburger',
+            onClick: () => setMobileMenuOpen(!mobileMenuOpen),
+            style: {
+              background: 'transparent',
+              color: 'white',
+              border: '1px solid #475569',
+              padding: '0.5rem',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '1.5rem',
+              minWidth: '48px',
+              minHeight: '48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }
+          }, mobileMenuOpen ? '✕' : '☰')
         ]),
         // Desktop navigation links
         !isMobile && React.createElement('div', {
@@ -205,9 +99,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           style: { display: 'flex', gap: '1rem', alignItems: 'center' }
         }, [
           React.createElement(Link, {
-            key: 'meal-planning',
+            key: 'betsy',
             to: '/',
-            style: navLinkStyle(location.pathname === '/' || location.pathname === '/meal-planning')
+            style: navLinkStyle(location.pathname === '/')
+          }, '👩‍🍳 Betsy'),
+          React.createElement(Link, {
+            key: 'meal-planning',
+            to: '/meal-planning',
+            style: navLinkStyle(location.pathname === '/meal-planning')
           }, 'Meal Planning'),
           React.createElement(Link, {
             key: 'recipes',
@@ -218,24 +117,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             key: 'shopping-lists',
             to: '/shopping-lists',
             style: navLinkStyle(location.pathname === '/shopping-lists')
-          }, 'Shopping List'),
-          React.createElement('button', {
-            key: 'voice-btn',
-            onClick: toggleVoiceListening,
-            style: {
-              background: isListening ? '#f97316' : '#6366f1',
-              color: 'white',
-              border: 'none',
-              padding: '0.625rem 1rem',
-              borderRadius: '9999px',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              minHeight: '44px'
-            }
-          }, [isListening ? '🛑 Stop' : '🎙️ Voice'])
+          }, 'Shopping List')
         ]),
         // Mobile dropdown menu
         isMobile && mobileMenuOpen && React.createElement('div', {
@@ -251,10 +133,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           }
         }, [
           React.createElement(Link, {
-            key: 'meal-planning-m',
+            key: 'betsy-m',
             to: '/',
             onClick: () => setMobileMenuOpen(false),
-            style: navLinkStyle(location.pathname === '/' || location.pathname === '/meal-planning')
+            style: navLinkStyle(location.pathname === '/')
+          }, '👩‍🍳 Betsy'),
+          React.createElement(Link, {
+            key: 'meal-planning-m',
+            to: '/meal-planning',
+            onClick: () => setMobileMenuOpen(false),
+            style: navLinkStyle(location.pathname === '/meal-planning')
           }, '📅 Meal Planning'),
           React.createElement(Link, {
             key: 'recipes-m',
@@ -270,102 +158,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           }, '🛒 Shopping List')
         ])
       ])
-    ]),
-    
-    // Voice status bar (shown when listening, processing, has transcript, or error)
-    (isListening || isProcessing || voiceTranscript || voiceError) && React.createElement('div', {
-      key: 'voice-status-bar',
-      style: {
-        background: isListening ? '#1e3a5f' : (isProcessing ? '#1e3a2f' : '#1e293b'),
-        borderBottom: `3px solid ${isListening ? '#f97316' : (isProcessing ? '#10b981' : '#334155')}`,
-        padding: isMobile ? '1rem' : '0.75rem 2rem',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '1rem',
-        fontSize: isMobile ? '1rem' : '1rem',
-        flexWrap: 'wrap',
-        animation: isListening ? 'pulse 1.5s ease-in-out infinite' : 'none'
-      }
-    }, [
-      // Listening indicator with animated mic and live transcript
-      isListening && React.createElement('div', {
-        key: 'voice-indicator',
-        style: { 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '0.75rem',
-          color: '#f97316',
-          fontWeight: 'bold',
-          flexWrap: 'wrap',
-          justifyContent: 'center'
-        }
-      }, [
-        React.createElement('span', {
-          key: 'mic-icon',
-          style: { 
-            fontSize: '1.75rem',
-            animation: 'pulse 0.8s ease-in-out infinite'
-          }
-        }, '🎤'),
-        React.createElement('span', { 
-          key: 'listening-text',
-          style: { color: '#f1f5f9' }
-        }, voiceTranscript ? '' : 'Listening... speak now'),
-        // Show live transcript while listening
-        voiceTranscript && React.createElement('span', {
-          key: 'live-transcript',
-          style: { 
-            color: '#fbbf24',
-            background: 'rgba(251, 191, 36, 0.15)',
-            padding: '0.25rem 0.75rem',
-            borderRadius: '0.375rem',
-            fontStyle: 'italic'
-          }
-        }, `"${voiceTranscript}"`)
-      ]),
-      // Processing indicator
-      isProcessing && !isListening && React.createElement('div', {
-        key: 'processing-indicator',
-        style: { 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '0.5rem',
-          color: '#10b981',
-          fontWeight: 'bold'
-        }
-      }, [
-        React.createElement('span', {
-          key: 'process-icon',
-          style: { fontSize: '1.25rem' }
-        }, '⚡'),
-        React.createElement('span', { key: 'process-text' }, 'Processing command...')
-      ]),
-      // Transcript display
-      voiceTranscript && !isListening && React.createElement('div', {
-        key: 'voice-transcript',
-        style: { 
-          color: '#cbd5e1', 
-          wordBreak: 'break-word', 
-          textAlign: 'center',
-          background: '#334155',
-          padding: '0.5rem 1rem',
-          borderRadius: '0.5rem'
-        }
-      }, [
-        React.createElement('span', { key: 'heard-label', style: { color: '#94a3b8' } }, 'Heard: '),
-        React.createElement('span', { key: 'heard-text', style: { fontWeight: 'bold' } }, `"${voiceTranscript}"`)
-      ]),
-      // Error display
-      voiceError && React.createElement('div', {
-        key: 'voice-error',
-        style: { 
-          color: '#fca5a5',
-          background: '#7f1d1d',
-          padding: '0.5rem 1rem',
-          borderRadius: '0.5rem'
-        }
-      }, voiceError)
     ]),
     
     // Main Content
@@ -450,7 +242,7 @@ function App() {
     React.createElement(Route, {
       key: 'home',
       path: '/',
-      element: React.createElement(Layout, null, React.createElement(MealPlanningPage))
+      element: React.createElement(Layout, null, React.createElement(BetsyPage))
     }),
     React.createElement(Route, {
       key: 'recipes',
