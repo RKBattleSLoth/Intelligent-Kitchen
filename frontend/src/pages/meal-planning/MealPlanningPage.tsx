@@ -404,6 +404,15 @@ export const MealPlanningPage: React.FC = () => {
     loadPlannedMeals()
   }, [currentDate])
 
+  // Subscribe to mealPlanService changes (for Betsy updates)
+  useEffect(() => {
+    const unsubscribe = mealPlanService.subscribe(() => {
+      console.log('[MealPlanningPage] Meal plan changed, reloading...')
+      loadPlannedMeals()
+    })
+    return unsubscribe
+  }, [])
+
   const loadFilters = () => {
     const savedFilters = mealPlanService.getFilters()
     setFilters(savedFilters)

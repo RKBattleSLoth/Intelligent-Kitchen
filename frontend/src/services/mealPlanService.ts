@@ -5,12 +5,26 @@ import api from './api'
 const STORAGE_KEY = 'intelligent-kitchen-meal-plans'
 const FILTERS_KEY = 'intelligent-kitchen-meal-filters'
 
+type MealPlanChangeListener = () => void
+
 class MealPlanService {
   private mealPlans: MealPlan[] = []
   private filters: MealPlanFilters = DEFAULT_MEAL_PLAN_FILTERS
+  private changeListeners: Set<MealPlanChangeListener> = new Set()
 
   constructor() {
     this.loadFromStorage()
+  }
+
+  // Subscribe to meal plan changes
+  subscribe(listener: MealPlanChangeListener): () => void {
+    this.changeListeners.add(listener)
+    return () => this.changeListeners.delete(listener)
+  }
+
+  // Notify all listeners of changes
+  private notifyChange(): void {
+    this.changeListeners.forEach(listener => listener())
   }
 
   private loadFromStorage(): void {
@@ -37,6 +51,7 @@ class MealPlanService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.mealPlans))
       localStorage.setItem(FILTERS_KEY, JSON.stringify(this.filters))
+      this.notifyChange()
     } catch (error) {
       console.error('Error saving meal plans to storage:', error)
     }
