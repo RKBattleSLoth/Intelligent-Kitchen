@@ -253,10 +253,36 @@ Now interpret the user input and respond with JSON only:`;
     
     console.log('⚠️ [BETSY_AGENT] Using fallback interpretation');
 
+    // Check for adding recipe ingredients to shopping list
+    // Pattern: "add [recipe name] to the shopping list" or "add ingredients for [recipe]"
+    if (text.match(/^add\b/i) && 
+        (text.includes('shopping list') || text.includes('grocery list')) &&
+        !text.match(/\b(milk|eggs|bread|butter|cheese|chicken|beef|pork|fish|rice|pasta|flour|sugar|salt|pepper|oil|onion|garlic|tomato|potato|carrot|lettuce|apple|banana|orange)\b/i)) {
+      // This looks like adding a recipe's ingredients, not a single grocery item
+      const recipeMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping|grocery)/i);
+      if (recipeMatch) {
+        const recipeName = recipeMatch[1]
+          .replace(/\s+ingredients$/i, '')
+          .replace(/^(the|a|an)\s+/i, '')
+          .trim();
+        if (recipeName && recipeName.length > 2) {
+          return {
+            success: true,
+            intent: 'add_recipe_to_shopping_list',
+            entities: { recipeName },
+            confidence: 0.7,
+            response: `I'll add the ingredients from "${recipeName}" to your shopping list.`,
+            metadata: { method: 'fallback' }
+          };
+        }
+      }
+    }
+
     // Check for add shopping item patterns (but NOT recipes or meals)
     if (text.match(/^(add|put|get|buy|need|pick up)\b/i) && 
         !text.match(/\b(breakfast|lunch|dinner|snack)\b/i) &&
-        !text.match(/\b(recipe|recipes)\b/i)) {
+        !text.match(/\b(recipe|recipes)\b/i) &&
+        !text.match(/\b(shopping list|grocery list)\b/i)) {
       const itemText = text
         .replace(/^(add|put|get|buy|need|pick up)\s+/i, '')
         .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?(list|cart).*$/i, '')
