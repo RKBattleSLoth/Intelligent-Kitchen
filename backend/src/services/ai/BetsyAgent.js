@@ -253,45 +253,26 @@ Now interpret the user input and respond with JSON only:`;
     
     console.log('⚠️ [BETSY_AGENT] Using fallback interpretation');
 
-    // Check for adding recipe ingredients to shopping list
-    // Pattern: "add [recipe name] to the shopping list" 
-    // Heuristic: if 2+ words before "to the shopping list", it's probably a recipe name
+    // Check for adding something to shopping list
+    // We'll return a special intent that tells the frontend to check if it's a recipe
     if (text.match(/^add\b/i) && 
         (text.includes('shopping list') || text.includes('grocery list'))) {
-      const recipeMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping|grocery)/i);
-      if (recipeMatch) {
-        const potentialRecipe = recipeMatch[1]
+      const itemMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping|grocery)/i);
+      if (itemMatch) {
+        const itemText = itemMatch[1]
           .replace(/\s+ingredients$/i, '')
           .replace(/^(the|a|an)\s+/i, '')
           .trim();
         
-        // If it's 2+ words, treat as recipe name (e.g., "asian chicken salad", "white chicken chili")
-        // Single words like "milk", "eggs" go to regular shopping item
-        const wordCount = potentialRecipe.split(/\s+/).length;
-        
-        console.log(`[BETSY_FALLBACK] Checking: "${potentialRecipe}" (${wordCount} words)`);
-        
-        if (potentialRecipe && wordCount >= 2) {
-          console.log(`[BETSY_FALLBACK] Detected recipe name: "${potentialRecipe}"`);
+        if (itemText) {
+          console.log(`[BETSY_FALLBACK] Add to shopping list: "${itemText}" - frontend will check if recipe exists`);
+          // Return a special intent that tells frontend to check recipes first
           return {
             success: true,
-            intent: 'add_recipe_to_shopping_list',
-            entities: { recipeName: potentialRecipe },
+            intent: 'add_to_shopping_list',
+            entities: { itemText },
             confidence: 0.7,
-            response: `I'll add the ingredients from "${potentialRecipe}" to your shopping list.`,
-            metadata: { method: 'fallback' }
-          };
-        }
-        
-        // Single word - treat as shopping item
-        if (potentialRecipe && wordCount === 1) {
-          console.log(`[BETSY_FALLBACK] Single word, treating as item: "${potentialRecipe}"`);
-          return {
-            success: true,
-            intent: 'add_shopping_item',
-            entities: { items: [{ name: potentialRecipe }] },
-            confidence: 0.6,
-            response: `I'll add "${potentialRecipe}" to your shopping list.`,
+            response: `I'll check if "${itemText}" is a recipe and add accordingly.`,
             metadata: { method: 'fallback' }
           };
         }

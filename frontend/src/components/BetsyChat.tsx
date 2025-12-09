@@ -246,6 +246,40 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         }
         break;
 
+      case 'add_to_shopping_list':
+        // Smart handler: check if itemText matches a recipe, if so add ingredients, otherwise add as item
+        if (entities.itemText) {
+          try {
+            const recipes = await recipeService.getAllRecipes();
+            const itemLower = entities.itemText.toLowerCase();
+            
+            // Find exact or close match
+            const exactMatch = recipes.find(r => r.name.toLowerCase() === itemLower);
+            const partialMatch = recipes.find(r => 
+              r.name.toLowerCase().includes(itemLower) || itemLower.includes(r.name.toLowerCase())
+            );
+            const matchedRecipe = exactMatch || partialMatch;
+            
+            if (matchedRecipe) {
+              // It's a recipe - add all ingredients
+              const ingredients = await recipeService.extractIngredients(matchedRecipe.instructions, matchedRecipe.name);
+              await shoppingListService.addIngredientsToList(ingredients);
+              addBetsyMessage(`Found recipe "${matchedRecipe.name}"! Added ${ingredients.length} ingredients to your list.`, {
+                type: 'shopping_list', details: `${ingredients.length} items from ${matchedRecipe.name}`, success: true
+              });
+            } else {
+              // Not a recipe - add as regular item
+              await shoppingListService.addShoppingListItem(entities.itemText);
+              addBetsyMessage(`Added "${entities.itemText}" to your shopping list.`, {
+                type: 'shopping_list', details: `Added: ${entities.itemText}`, success: true
+              });
+            }
+          } catch (e) {
+            addBetsyMessage("Error adding to shopping list.", { type: 'shopping_list', details: 'Failed', success: false });
+          }
+        }
+        break;
+
       case 'add_recipe_to_shopping_list':
         if (entities.recipeName) {
           try {

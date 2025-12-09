@@ -49,6 +49,12 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     checkAIStatus();
     loadTemplates();
 
+    // Subscribe to shopping list changes (for Betsy updates)
+    const unsubShoppingList = shoppingListService.subscribe(() => {
+      console.log('[ShoppingListPage] Shopping list changed, reloading...');
+      loadShoppingList();
+    });
+
     const unsubCommand = voiceService.onCommand(async (command) => {
       setVoiceError(null);
       await handleVoiceCommand(command);
@@ -67,6 +73,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     });
 
     return () => {
+      unsubShoppingList();
       unsubCommand();
       unsubResult();
       unsubError();

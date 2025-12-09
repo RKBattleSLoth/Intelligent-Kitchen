@@ -2,7 +2,22 @@ import { ShoppingListItem } from '../types/shoppingList';
 
 const STORAGE_KEY = 'intelligent-kitchen-shopping-list';
 
+type ShoppingListChangeListener = () => void;
+
 class ShoppingListService {
+  private changeListeners: Set<ShoppingListChangeListener> = new Set();
+
+  // Subscribe to shopping list changes
+  subscribe(listener: ShoppingListChangeListener): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  // Notify all listeners of changes
+  protected notifyChange(): void {
+    this.changeListeners.forEach(listener => listener());
+  }
+
   protected getItems(): ShoppingListItem[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -14,6 +29,7 @@ class ShoppingListService {
 
   protected saveItems(items: ShoppingListItem[]): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    this.notifyChange();
   }
 
   protected generateId(): string {

@@ -14,7 +14,7 @@ export interface BetsyInterpretation {
           'clear_shopping_list' | 'clear_meals' | 'generate_meals' | 'import_recipe' |
           'search_recipe' | 'add_recipe_to_shopping_list' | 'consolidate_shopping_list' |
           'move_meal' | 'swap_meals' | 'delete_recipe' | 'search_recipes' |
-          'create_recipe' | 'web_search_recipe' |
+          'create_recipe' | 'web_search_recipe' | 'add_to_shopping_list' |
           'help' | 'greeting' | 'unknown';
   entities: {
     items?: ShoppingItem[];
@@ -38,6 +38,7 @@ export interface BetsyInterpretation {
     mealType1?: string;
     day2?: string;
     mealType2?: string;
+    itemText?: string;
   };
   confidence: number;
   response: string;
