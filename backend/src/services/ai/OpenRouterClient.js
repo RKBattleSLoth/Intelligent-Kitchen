@@ -94,9 +94,15 @@ class OpenRouterClient {
         lastError = error;
         console.error(`❌ OpenRouter Attempt ${attempt} failed:`, error.message);
         
+        // Don't retry on rate limit errors (429) - they won't resolve in seconds
+        if (error.message.includes('429')) {
+          console.log(`⚠️ Rate limit hit, skipping retries for this model`);
+          break;
+        }
+        
         if (attempt < this.maxRetries) {
-          // Exponential backoff
-          const delay = Math.pow(2, attempt) * 1000;
+          // Short delay for transient errors
+          const delay = 1000;
           console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }

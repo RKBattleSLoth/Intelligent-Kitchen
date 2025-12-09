@@ -80,7 +80,7 @@ class SmartMealPlanner {
         ], {
           model,
           temperature: 0.7,
-          maxTokens: 8000
+          maxTokens: 4000  // Reduced - concise prompt needs fewer tokens
         });
         usedModel = model;
         console.log(`✅ [SMART_MEAL_PLANNER] Success with ${model}`);
@@ -247,39 +247,13 @@ class SmartMealPlanner {
     const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
 
     let prompt = `Generate ${dayCount * mealTypes.length} meals for ${peopleCount} people from ${startDate} to ${endDate}.
-
-Dietary: ${preferences.dietary || 'none'}
-Cuisines: ${preferences.cuisines?.length > 0 ? preferences.cuisines.join(', ') : 'any'}
-Budget: ${preferences.budget || 'moderate'}
-
+Dietary: ${preferences.dietary || 'none'}, Budget: ${preferences.budget || 'moderate'}
 Meal types: ${mealTypes.join(', ')}
 
-Each meal MUST include:
-- Step-by-step instructions (Step 1, Step 2, etc.)
-- Specific ingredient quantities
-- Cooking times and temperatures
+Return JSON only:
+{"name":"Week Plan","meals":[{"date":"YYYY-MM-DD","mealType":"breakfast|lunch|dinner","name":"Meal Name","description":"One sentence","instructions":"Brief cooking steps","ingredients":["qty item","qty item"],"cookTime":30}]}
 
-JSON format:
-{
-  "name": "meal plan name",
-  "description": "brief description",
-  "meals": [
-    {
-      "date": "YYYY-MM-DD",
-      "mealType": "breakfast|lunch|dinner|snack|dessert",
-      "name": "meal name",
-      "description": "brief description",
-      "instructions": "Step 1: Action Step 2: Action Step 3: Action Step 4: Action Step 5: Action",
-      "ingredients": ["2 cups flour", "1 tbsp olive oil", "2 cloves garlic"],
-      "cookTime": 30,
-      "difficulty": "easy|medium|hard",
-      "isUserRecipe": false,
-      "userRecipeId": null
-    }
-  ]
-}
-
-Return valid JSON only. No extra text.`;
+Keep descriptions and instructions concise (1-2 sentences each). Include 4-8 ingredients per meal with quantities.`;
 
     return prompt;
   }
