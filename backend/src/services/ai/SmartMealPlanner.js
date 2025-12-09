@@ -59,11 +59,11 @@ class SmartMealPlanner {
       promptLength: prompt.length
     });
 
-    // Models to try in order (fast/cheap first, then fallbacks)
+    // Models to try in order - all ZDR-compatible (fast/cheap first)
     const modelsToTry = [
       process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3-5-haiku-20241022',
-      'google/gemini-flash-1.5',  // Fast and cheap fallback
-      'openai/gpt-4o-mini'        // Another reliable fallback
+      'google/gemini-2.0-flash',  // ZDR via Google
+      'google/gemini-2.5-flash-lite'  // ZDR via Google, cheaper fallback
     ];
     
     let response = null;
