@@ -255,9 +255,10 @@ Now interpret the user input and respond with JSON only:`;
 
     // Check for adding something to shopping list
     // We'll return a special intent that tells the frontend to check if it's a recipe
+    // Supports: "shopping list", "my shopping list", "our shopping list", "the shopping list", "grocery list"
     if (text.match(/^add\b/i) && 
-        (text.includes('shopping list') || text.includes('grocery list'))) {
-      const itemMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping|grocery)/i);
+        (text.includes('shopping list') || text.includes('grocery list') || text.includes('shopping'))) {
+      const itemMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+|my\s+|our\s+)?(?:shopping|grocery)/i);
       if (itemMatch) {
         const itemText = itemMatch[1]
           .replace(/\s+ingredients$/i, '')
