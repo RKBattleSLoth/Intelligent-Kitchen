@@ -152,6 +152,8 @@ class BetsyService {
         endDate,
         mealTypes: ['breakfast', 'lunch', 'dinner'],
         peopleCount: 4
+      }, {
+        timeout: 180000 // 3 minutes - AI meal generation can take a while
       });
 
       const mealPlan = response.data.mealPlan;
