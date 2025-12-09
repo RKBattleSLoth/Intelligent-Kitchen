@@ -254,38 +254,58 @@ Now interpret the user input and respond with JSON only:`;
     console.log('⚠️ [BETSY_AGENT] Using fallback interpretation');
 
     // Check for adding recipe ingredients to shopping list
-    // Pattern: "add [recipe name] to the shopping list" or "add ingredients for [recipe]"
+    // Pattern: "add [recipe name] to the shopping list" 
+    // Heuristic: if 2+ words before "to the shopping list", it's probably a recipe name
     if (text.match(/^add\b/i) && 
-        (text.includes('shopping list') || text.includes('grocery list')) &&
-        !text.match(/\b(milk|eggs|bread|butter|cheese|chicken|beef|pork|fish|rice|pasta|flour|sugar|salt|pepper|oil|onion|garlic|tomato|potato|carrot|lettuce|apple|banana|orange)\b/i)) {
-      // This looks like adding a recipe's ingredients, not a single grocery item
+        (text.includes('shopping list') || text.includes('grocery list'))) {
       const recipeMatch = text.match(/^add\s+(?:the\s+)?(?:ingredients\s+(?:for|from)\s+)?(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping|grocery)/i);
       if (recipeMatch) {
-        const recipeName = recipeMatch[1]
+        const potentialRecipe = recipeMatch[1]
           .replace(/\s+ingredients$/i, '')
           .replace(/^(the|a|an)\s+/i, '')
           .trim();
-        if (recipeName && recipeName.length > 2) {
+        
+        // If it's 2+ words, treat as recipe name (e.g., "asian chicken salad", "white chicken chili")
+        // Single words like "milk", "eggs" go to regular shopping item
+        const wordCount = potentialRecipe.split(/\s+/).length;
+        
+        console.log(`[BETSY_FALLBACK] Checking: "${potentialRecipe}" (${wordCount} words)`);
+        
+        if (potentialRecipe && wordCount >= 2) {
+          console.log(`[BETSY_FALLBACK] Detected recipe name: "${potentialRecipe}"`);
           return {
             success: true,
             intent: 'add_recipe_to_shopping_list',
-            entities: { recipeName },
+            entities: { recipeName: potentialRecipe },
             confidence: 0.7,
-            response: `I'll add the ingredients from "${recipeName}" to your shopping list.`,
+            response: `I'll add the ingredients from "${potentialRecipe}" to your shopping list.`,
+            metadata: { method: 'fallback' }
+          };
+        }
+        
+        // Single word - treat as shopping item
+        if (potentialRecipe && wordCount === 1) {
+          console.log(`[BETSY_FALLBACK] Single word, treating as item: "${potentialRecipe}"`);
+          return {
+            success: true,
+            intent: 'add_shopping_item',
+            entities: { items: [{ name: potentialRecipe }] },
+            confidence: 0.6,
+            response: `I'll add "${potentialRecipe}" to your shopping list.`,
             metadata: { method: 'fallback' }
           };
         }
       }
     }
 
-    // Check for add shopping item patterns (but NOT recipes or meals)
+    // Check for add shopping item patterns (without "to the shopping list")
     if (text.match(/^(add|put|get|buy|need|pick up)\b/i) && 
         !text.match(/\b(breakfast|lunch|dinner|snack)\b/i) &&
         !text.match(/\b(recipe|recipes)\b/i) &&
-        !text.match(/\b(shopping list|grocery list)\b/i)) {
+        !text.includes('shopping list') && !text.includes('grocery list')) {
       const itemText = text
         .replace(/^(add|put|get|buy|need|pick up)\s+/i, '')
-        .replace(/\s+(to|on|in)\s+(the\s+)?(shopping\s+)?(list|cart).*$/i, '')
+        .replace(/\s+(to|on|in)\s+(the\s+)?(list|cart).*$/i, '')
         .replace(/\s+please$/i, '')
         .trim();
       
