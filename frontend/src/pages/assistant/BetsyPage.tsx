@@ -325,14 +325,37 @@ export const BetsyPage: React.FC = () => {
             const matchedRecipe = exactMatch || partialMatch;
             
             if (matchedRecipe) {
-              // It's a recipe - add all ingredients
-              const ingredients = await recipeService.extractIngredients(matchedRecipe.instructions, matchedRecipe.name);
-              await shoppingListService.addIngredientsToList(ingredients);
-              addBetsyMessage(`Found recipe "${matchedRecipe.name}"! Added ${ingredients.length} ingredients to your shopping list.`, {
-                type: 'shopping_list',
-                details: `${ingredients.length} items from ${matchedRecipe.name}`,
-                success: true
-              });
+              // It's a recipe - add all ingredients from recipe.ingredients if available
+              let ingredientsList: string[] = [];
+              
+              if (matchedRecipe.ingredients && matchedRecipe.ingredients.length > 0) {
+                // Use stored ingredients directly
+                ingredientsList = matchedRecipe.ingredients.map(ing => {
+                  if (typeof ing === 'string') return ing;
+                  // Format structured ingredient
+                  const parts = [];
+                  if (ing.quantity) parts.push(String(ing.quantity));
+                  if (ing.unit) parts.push(ing.unit);
+                  if (ing.name) parts.push(ing.name);
+                  else if (ing.text) parts.push(ing.text);
+                  return parts.join(' ') || ing.text || '';
+                }).filter(s => s.trim());
+              } else {
+                // Fallback to AI extraction if no ingredients stored
+                ingredientsList = await recipeService.extractIngredients(matchedRecipe.instructions, matchedRecipe.name);
+              }
+              
+              if (ingredientsList.length > 0) {
+                await shoppingListService.addIngredientsToList(ingredientsList);
+                addBetsyMessage(`Found recipe "${matchedRecipe.name}"! Added ${ingredientsList.length} ingredients to your shopping list.`, {
+                  type: 'shopping_list',
+                  details: `${ingredientsList.length} items from ${matchedRecipe.name}`,
+                  success: true
+                });
+              } else {
+                addBetsyMessage(`Found recipe "${matchedRecipe.name}" but couldn't extract ingredients. Adding recipe name instead.`);
+                await shoppingListService.addShoppingListItem(matchedRecipe.name);
+              }
             } else {
               // Not a recipe - add as regular item
               await shoppingListService.addShoppingListItem(entities.itemText);
@@ -360,12 +383,27 @@ export const BetsyPage: React.FC = () => {
               r.name.toLowerCase().includes(entities.recipeName!.toLowerCase())
             );
             if (recipe) {
-              const ingredients = await recipeService.extractIngredients(recipe.instructions, recipe.name);
-              if (ingredients.length > 0) {
-                await shoppingListService.addIngredientsToList(ingredients);
-                addBetsyMessage(`Done! I've added ${ingredients.length} ingredients from "${recipe.name}" to your shopping list.`, {
+              // Use stored ingredients if available, fallback to AI extraction
+              let ingredientsList: string[] = [];
+              if (recipe.ingredients && recipe.ingredients.length > 0) {
+                ingredientsList = recipe.ingredients.map(ing => {
+                  if (typeof ing === 'string') return ing;
+                  const parts = [];
+                  if (ing.quantity) parts.push(String(ing.quantity));
+                  if (ing.unit) parts.push(ing.unit);
+                  if (ing.name) parts.push(ing.name);
+                  else if (ing.text) parts.push(ing.text);
+                  return parts.join(' ') || ing.text || '';
+                }).filter(s => s.trim());
+              } else {
+                ingredientsList = await recipeService.extractIngredients(recipe.instructions, recipe.name);
+              }
+              
+              if (ingredientsList.length > 0) {
+                await shoppingListService.addIngredientsToList(ingredientsList);
+                addBetsyMessage(`Done! I've added ${ingredientsList.length} ingredients from "${recipe.name}" to your shopping list.`, {
                   type: 'shopping_list',
-                  details: `Added ${ingredients.length} ingredients from ${recipe.name}`,
+                  details: `Added ${ingredientsList.length} ingredients from ${recipe.name}`,
                   success: true
                 });
               } else {
