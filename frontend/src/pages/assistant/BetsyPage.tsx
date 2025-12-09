@@ -426,12 +426,21 @@ export const BetsyPage: React.FC = () => {
 
       case 'consolidate_shopping_list':
         try {
-          const consolidated = await enhancedShoppingListService.consolidateItems();
-          addBetsyMessage(`Done! I've consolidated your shopping list. You now have ${consolidated.length} unique items.`, {
-            type: 'shopping_list',
-            details: `Consolidated to ${consolidated.length} items`,
-            success: true
-          });
+          const { items: consolidatedItems, stats } = await enhancedShoppingListService.consolidateItems();
+          if (stats.combinedCount > 0) {
+            const itemList = stats.combinedItems.slice(0, 3).join(', ');
+            const moreText = stats.combinedItems.length > 3 ? ` and ${stats.combinedItems.length - 3} more` : '';
+            addBetsyMessage(
+              `Done! Combined ${stats.combinedCount} duplicate${stats.combinedCount > 1 ? 's' : ''}: ${itemList}${moreText}. List reduced from ${stats.originalCount} to ${stats.finalCount} items.`,
+              { type: 'shopping_list', details: `Combined ${stats.combinedCount}`, success: true }
+            );
+          } else {
+            addBetsyMessage(`No duplicates found. Your ${stats.finalCount} items are already consolidated.`, {
+              type: 'shopping_list',
+              details: 'No changes needed',
+              success: true
+            });
+          }
         } catch (e) {
           addBetsyMessage("I had trouble consolidating the list. Please try again.", {
             type: 'shopping_list',

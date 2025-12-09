@@ -335,9 +335,19 @@ class EnhancedShoppingListService extends ShoppingListService {
     return newTemplate;
   }
 
-  async consolidateItems(): Promise<ShoppingListItem[]> {
+  async consolidateItems(): Promise<{ items: ShoppingListItem[]; stats: { originalCount: number; finalCount: number; combinedCount: number; combinedItems: string[] } }> {
     const items = this.getItems();
-    if (items.length <= 1) return items;
+    const originalCount = items.length;
+    
+    if (items.length <= 1) {
+      return { 
+        items, 
+        stats: { originalCount, finalCount: items.length, combinedCount: 0, combinedItems: [] } 
+      };
+    }
+
+    // Track which items got combined
+    const combinedItems: string[] = [];
 
     // Extract quantity and name from item text like "2 cups flour" or "3 eggs"
     const parseItemText = (text: string): { quantity: number; unit: string; name: string } => {
@@ -383,6 +393,11 @@ class EnhancedShoppingListService extends ShoppingListService {
         const existing = consolidated.get(key)!;
         const existingParsed = existing.parsed;
         
+        // Track that this item was combined
+        if (!combinedItems.includes(itemName)) {
+          combinedItems.push(itemName);
+        }
+        
         // Add quantities if both have numeric quantities and compatible units
         if (existingParsed.quantity > 0 && parsed.quantity > 0) {
           // Same unit or one has no unit
@@ -418,7 +433,16 @@ class EnhancedShoppingListService extends ShoppingListService {
 
     const result = Array.from(consolidated.values()).map(v => v.item);
     this.saveItems(result);
-    return result;
+    
+    return {
+      items: result,
+      stats: {
+        originalCount,
+        finalCount: result.length,
+        combinedCount: combinedItems.length,
+        combinedItems
+      }
+    };
   }
 }
 
