@@ -55,7 +55,7 @@ class SmartMealPlanner {
     console.log('🤖 [SMART_MEAL_PLANNER] AI Service Check:', {
       hasApiKey: !!process.env.OPENROUTER_API_KEY,
       apiKeyLength: process.env.OPENROUTER_API_KEY?.length || 0,
-      model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3.5-sonnet',
+      model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3-5-haiku-20241022',
       promptLength: prompt.length
     });
 
@@ -67,7 +67,7 @@ class SmartMealPlanner {
           content: prompt
         }
       ], {
-        model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3.5-sonnet',
+        model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3-5-haiku-20241022',
         temperature: 0.7,
         maxTokens: 8000
       });
@@ -1089,7 +1089,7 @@ Respond in JSON format:
           content: prompt
         }
       ], {
-        model: 'anthropic/claude-3.5-sonnet',
+        model: 'anthropic/claude-3-5-haiku-20241022',
         temperature: 0.7,
         maxTokens: 1000
       });
