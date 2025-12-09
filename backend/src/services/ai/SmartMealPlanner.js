@@ -59,18 +59,44 @@ class SmartMealPlanner {
       promptLength: prompt.length
     });
 
-    try {
-      console.log('🔄 [SMART_MEAL_PLANNER] Attempting AI generation...');
-      const response = await this.client.chat([
-        {
-          role: 'user',
-          content: prompt
+    // Models to try in order (fast/cheap first, then fallbacks)
+    const modelsToTry = [
+      process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3-5-haiku-20241022',
+      'google/gemini-flash-1.5',  // Fast and cheap fallback
+      'openai/gpt-4o-mini'        // Another reliable fallback
+    ];
+    
+    let response = null;
+    let usedModel = null;
+    
+    for (const model of modelsToTry) {
+      try {
+        console.log(`🔄 [SMART_MEAL_PLANNER] Attempting AI generation with ${model}...`);
+        response = await this.client.chat([
+          {
+            role: 'user',
+            content: prompt
+          }
+        ], {
+          model,
+          temperature: 0.7,
+          maxTokens: 8000
+        });
+        usedModel = model;
+        console.log(`✅ [SMART_MEAL_PLANNER] Success with ${model}`);
+        break; // Success - exit the loop
+      } catch (modelError) {
+        console.log(`⚠️ [SMART_MEAL_PLANNER] ${model} failed: ${modelError.message}`);
+        if (model === modelsToTry[modelsToTry.length - 1]) {
+          // Last model also failed, throw the error
+          throw modelError;
         }
-      ], {
-        model: process.env.OPENROUTER_MEAL_PLANNER_MODEL || 'anthropic/claude-3-5-haiku-20241022',
-        temperature: 0.7,
-        maxTokens: 8000
-      });
+        // Try next model
+        continue;
+      }
+    }
+    
+    try {
 
       console.log('✅ [SMART_MEAL_PLANNER] AI response received:', {
         hasContent: !!response?.content,
