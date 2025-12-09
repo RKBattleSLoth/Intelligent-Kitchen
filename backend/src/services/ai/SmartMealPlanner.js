@@ -251,10 +251,10 @@ Dietary: ${preferences.dietary || 'none'}, Budget: ${preferences.budget || 'mode
 Meal types: ${mealTypes.join(', ')}
 
 Return JSON only:
-{"name":"Week Plan","meals":[{"date":"YYYY-MM-DD","mealType":"breakfast|lunch|dinner","name":"Meal Name","description":"One sentence","instructions":"Step 1: Do X. Step 2: Do Y. Step 3: Do Z.","ingredients":["qty item","qty item"],"cookTime":30}]}
+{"name":"Week Plan","meals":[{"date":"YYYY-MM-DD","mealType":"breakfast|lunch|dinner","name":"Meal Name","description":"One sentence","instructions":"Preheat oven to 400F. Season chicken with salt and pepper. Roast for 25 minutes until internal temp reaches 165F. Let rest 5 minutes before serving.","ingredients":["2 lbs chicken breast","1 tsp salt","1/2 tsp pepper"],"cookTime":30}]}
 
 Requirements:
-- Instructions: 4-6 numbered steps with specific actions, temps, and times
+- Instructions: 4-6 sentences describing the cooking process (NO numbered steps, just flowing sentences)
 - Ingredients: 5-10 items with exact quantities
 - Description: 1 sentence`;
 
