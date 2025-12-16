@@ -13,7 +13,7 @@ export interface BetsyInterpretation {
   intent: 'add_shopping_item' | 'navigate' | 'add_meal' | 'remove_shopping_item' | 
           'clear_shopping_list' | 'clear_meals' | 'generate_meals' | 'import_recipe' |
           'search_recipe' | 'add_recipe_to_shopping_list' | 'consolidate_shopping_list' |
-          'move_meal' | 'swap_meals' | 'delete_recipe' | 'search_recipes' |
+          'double_recipe' | 'move_meal' | 'swap_meals' | 'swap_all_meals' | 'save_recipe' | 'delete_recipe' | 'search_recipes' |
           'create_recipe' | 'web_search_recipe' | 'add_to_shopping_list' |
           'help' | 'greeting' | 'unknown';
   entities: {
@@ -39,6 +39,7 @@ export interface BetsyInterpretation {
     day2?: string;
     mealType2?: string;
     itemText?: string;
+    multiplier?: number;
   };
   confidence: number;
   response: string;

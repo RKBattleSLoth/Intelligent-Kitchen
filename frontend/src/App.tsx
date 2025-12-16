@@ -7,6 +7,21 @@ import { MealPlanningPage } from './pages/meal-planning/MealPlanningPage'
 import { ShoppingListPage } from './pages/shopping-lists/ShoppingListPage'
 import { BetsyPage } from './pages/assistant/BetsyPage'
 import { BetsyButton } from './components/BetsyChat'
+import { LayoutGrid, BookOpen, Calendar, ShoppingBag, Settings, Menu, X } from 'lucide-react'
+
+// Import background assets
+import kitchenArtwork from './assets/22246ed99a2fab284b1e8aa82ad1cd071e78c525.png'
+
+const KitchenIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="24" cy="24" r="20" fill="#0fc7b9" opacity="0.2"/>
+    <path d="M16 18C16 16.8954 16.8954 16 18 16H30C31.1046 16 32 16.8954 32 18V32C32 33.1046 31.1046 34 30 34H18C16.8954 34 16 33.1046 16 32V18Z" stroke="#035b49" strokeWidth="2"/>
+    <path d="M20 16V14C20 12.8954 20.8954 12 22 12H26C27.1046 12 28 12.8954 28 14V16" stroke="#035b49" strokeWidth="2"/>
+    <circle cx="24" cy="25" r="4" stroke="#d4af37" strokeWidth="2"/>
+    <path d="M24 21V29" stroke="#d4af37" strokeWidth="1.5"/>
+    <path d="M20 25H28" stroke="#d4af37" strokeWidth="1.5"/>
+  </svg>
+)
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
@@ -20,191 +35,230 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const navLinkStyle = (isActive: boolean) => ({
-    color: isActive ? '#60a5fa' : 'white',
-    textDecoration: 'none',
-    padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
-    borderRadius: '0.25rem',
-    background: isActive ? 'rgba(96, 165, 250, 0.1)' : 'transparent',
-    display: 'block',
-    minHeight: '44px',
-    lineHeight: isMobile ? '1.5rem' : 'normal'
-  })
-  
-  return React.createElement('div', { style: { minHeight: '100vh', background: '#0f172a' } }, [
-    // Navigation
-    React.createElement('nav', {
-      key: 'nav',
-      style: {
-        background: '#1e293b',
-        color: '#f1f5f9',
-        padding: isMobile ? '0.75rem 1rem' : '1rem 2rem',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-        borderBottom: '1px solid #334155'
-      }
-    }, [
-      React.createElement('div', {
-        key: 'nav-content',
-        style: { 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '0.5rem'
-        }
-      }, [
-        // Logo and hamburger row
-        React.createElement('div', {
-          key: 'logo-row',
-          style: { 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            width: isMobile ? '100%' : 'auto',
-            gap: '0.5rem'
-          }
-        }, [
-          React.createElement(Link, {
-            key: 'logo',
-            to: '/',
-            style: { 
-              fontSize: isMobile ? '1.25rem' : '1.5rem', 
-              fontWeight: 'bold',
-              color: '#f1f5f9',
-              textDecoration: 'none'
-            }
-          }, '🍳 Intelligent Kitchen'),
-          // Mobile hamburger
-          isMobile && React.createElement('button', {
-            key: 'hamburger',
-            onClick: () => setMobileMenuOpen(!mobileMenuOpen),
-            style: {
-              background: 'transparent',
-              color: 'white',
-              border: '1px solid #475569',
-              padding: '0.5rem',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '1.5rem',
-              minWidth: '48px',
-              minHeight: '48px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }
-          }, mobileMenuOpen ? '✕' : '☰')
-        ]),
-        // Desktop navigation links
-        !isMobile && React.createElement('div', {
-          key: 'links',
-          style: { display: 'flex', gap: '1rem', alignItems: 'center' }
-        }, [
-          React.createElement(Link, {
-            key: 'betsy',
-            to: '/',
-            style: navLinkStyle(location.pathname === '/')
-          }, '👩‍🍳 Betsy'),
-          React.createElement(Link, {
-            key: 'meal-planning',
-            to: '/meal-planning',
-            style: navLinkStyle(location.pathname === '/meal-planning')
-          }, 'Meal Planning'),
-          React.createElement(Link, {
-            key: 'recipes',
-            to: '/recipes',
-            style: navLinkStyle(location.pathname === '/recipes')
-          }, 'Recipes'),
-          React.createElement(Link, {
-            key: 'shopping-lists',
-            to: '/shopping-lists',
-            style: navLinkStyle(location.pathname === '/shopping-lists')
-          }, 'Shopping List')
-        ]),
-        // Mobile dropdown menu
-        isMobile && mobileMenuOpen && React.createElement('div', {
-          key: 'mobile-menu',
-          style: {
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.25rem',
-            paddingTop: '0.75rem',
-            borderTop: '1px solid #334155',
-            marginTop: '0.5rem'
-          }
-        }, [
-          React.createElement(Link, {
-            key: 'betsy-m',
-            to: '/',
-            onClick: () => setMobileMenuOpen(false),
-            style: navLinkStyle(location.pathname === '/')
-          }, '👩‍🍳 Betsy'),
-          React.createElement(Link, {
-            key: 'meal-planning-m',
-            to: '/meal-planning',
-            onClick: () => setMobileMenuOpen(false),
-            style: navLinkStyle(location.pathname === '/meal-planning')
-          }, '📅 Meal Planning'),
-          React.createElement(Link, {
-            key: 'recipes-m',
-            to: '/recipes',
-            onClick: () => setMobileMenuOpen(false),
-            style: navLinkStyle(location.pathname === '/recipes')
-          }, '📖 Recipes'),
-          React.createElement(Link, {
-            key: 'shopping-lists-m',
-            to: '/shopping-lists',
-            onClick: () => setMobileMenuOpen(false),
-            style: navLinkStyle(location.pathname === '/shopping-lists')
-          }, '🛒 Shopping List')
-        ])
-      ])
-    ]),
-    
-    // Main Content
-    React.createElement('main', {
-      key: 'main',
-      style: { padding: isMobile ? '1rem' : '2rem' }
-    }, children),
-    
-    // Floating Betsy Button (only show on pages other than Betsy's dedicated page)
-    location.pathname !== '/' && React.createElement(BetsyButton, { key: 'betsy-button' })
-  ])
-}
+  const isActive = (path: string) => location.pathname === path
 
-const PlaceholderPage = ({ title, description, emoji }: { title: string; description: string; emoji: string }) => 
-  React.createElement('div', null, [
-    React.createElement('h1', {
-      key: 'title',
-      style: { fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
-    }, `${emoji} ${title}`),
-    React.createElement('p', {
-      key: 'desc',
-      style: { color: '#94a3b8', marginBottom: '2rem' }
-    }, description),
-    React.createElement('div', {
-      key: 'placeholder',
-      style: {
-        background: '#1e293b',
-        padding: '2rem',
-        borderRadius: '0.5rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        border: '1px solid #334155',
-        textAlign: 'center'
-      }
-    }, [
-      React.createElement('div', { key: 'icon', style: { fontSize: '3rem', marginBottom: '1rem' } }, '🚧'),
-      React.createElement('h3', { key: 'subtitle', style: { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#f1f5f9' } }, 'Coming Soon'),
-      React.createElement('p', { key: 'text', style: { color: '#94a3b8' } }, 'This feature is under construction. Check back soon!')
-    ])
-  ])
+  const navLinkClass = (path: string) => 
+    `px-4 py-2 transition-colors font-bold ${
+      isActive(path) 
+        ? 'border-b-2 border-[#d4af37] text-[#035b49]' 
+        : 'text-[#035b49] hover:text-[#2a6f6f]'
+    }`
+
+  const mobileNavLinkClass = (path: string) =>
+    `flex items-center gap-3 px-4 py-3 transition-colors ${
+      isActive(path)
+        ? 'text-[#EA6A47] bg-orange-50'
+        : 'text-gray-600 hover:bg-gray-50'
+    }`
+
+  return (
+    <div 
+      className="min-h-screen flex flex-col"
+      style={{
+        backgroundColor: '#f0fdfa',
+        backgroundImage: `url(${kitchenArtwork})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundBlendMode: 'soft-light',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Decorative corner flourishes */}
+      <div 
+        className="fixed top-0 left-0 w-32 h-32 pointer-events-none opacity-20 z-0"
+        style={{ background: 'radial-gradient(circle at top left, #d4af37 0%, transparent 70%)' }}
+      />
+      <div 
+        className="fixed top-0 right-0 w-32 h-32 pointer-events-none opacity-20 z-0"
+        style={{ background: 'radial-gradient(circle at top right, #d4af37 0%, transparent 70%)' }}
+      />
+
+      {/* Header Navigation */}
+      <nav 
+        className="bg-white/90 backdrop-blur-sm border-b border-gray-200 shadow-sm relative z-20"
+        style={{ borderBottom: '1px solid #e5e7eb' }}
+      >
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6">
+          {/* Desktop Header */}
+          <div className="hidden md:flex items-center justify-between h-16">
+            <Link to="/" className="flex items-center gap-2">
+              <KitchenIcon />
+              <span 
+                className="text-2xl"
+                style={{
+                  color: '#33789f',
+                  fontWeight: 400,
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontStyle: 'italic'
+                }}
+              >
+                Intelligent Kitchen
+              </span>
+            </Link>
+            
+            <div className="flex gap-6">
+              <Link to="/" className={navLinkClass('/')}>
+                👩‍🍳 Betsy
+              </Link>
+              <Link to="/meal-planning" className={navLinkClass('/meal-planning')}>
+                Meal Planning
+              </Link>
+              <Link to="/recipes" className={navLinkClass('/recipes')}>
+                Recipes
+              </Link>
+              <Link to="/shopping-lists" className={navLinkClass('/shopping-lists')}>
+                Shopping List
+              </Link>
+            </div>
+          </div>
+
+          {/* Mobile Header */}
+          <div className="flex md:hidden items-center justify-between h-16">
+            <Link to="/" className="flex items-center gap-2">
+              <KitchenIcon />
+              <span 
+                className="text-xl"
+                style={{
+                  color: '#33789f',
+                  fontWeight: 400,
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontStyle: 'italic'
+                }}
+              >
+                Intelligent Kitchen
+              </span>
+            </Link>
+            
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+
+          {/* Mobile Menu Dropdown */}
+          {isMobile && mobileMenuOpen && (
+            <div className="md:hidden border-t border-gray-200 py-2 bg-white">
+              <Link 
+                to="/" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={mobileNavLinkClass('/')}
+              >
+                <span className="text-xl">👩‍🍳</span>
+                <span>Betsy</span>
+              </Link>
+              <Link 
+                to="/meal-planning" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={mobileNavLinkClass('/meal-planning')}
+              >
+                <Calendar className="w-5 h-5" />
+                <span>Meal Planning</span>
+              </Link>
+              <Link 
+                to="/recipes" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={mobileNavLinkClass('/recipes')}
+              >
+                <BookOpen className="w-5 h-5" />
+                <span>Recipes</span>
+              </Link>
+              <Link 
+                to="/shopping-lists" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={mobileNavLinkClass('/shopping-lists')}
+              >
+                <ShoppingBag className="w-5 h-5" />
+                <span>Shopping List</span>
+              </Link>
+            </div>
+          )}
+        </div>
+      </nav>
+      
+      {/* Main Content */}
+      <main className="max-w-[1600px] mx-auto p-4 sm:p-6 flex-1 pb-24 md:pb-6 relative z-10">
+        {children}
+      </main>
+
+      {/* Gold accent bar */}
+      <div 
+        className="h-1 hidden md:block"
+        style={{ background: 'linear-gradient(to bottom, #e8d399, #dbc68a)' }}
+      />
+      
+      {/* Footer - Desktop only */}
+      <footer className="hidden md:block bg-white/90 backdrop-blur-sm border-t border-gray-200">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div 
+            className="text-center text-sm"
+            style={{
+              fontFamily: "'Lora', Georgia, serif",
+              fontStyle: 'italic',
+              color: '#2a6f6f'
+            }}
+          >
+            "The secret ingredient is always love" — Est. 2024
+          </div>
+        </div>
+      </footer>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div className="grid grid-cols-4 h-16">
+          <Link
+            to="/"
+            className={`flex flex-col items-center justify-center gap-1 transition-colors ${
+              isActive('/') ? 'text-[#EA6A47]' : 'text-gray-500'
+            }`}
+          >
+            <span className="text-lg">👩‍🍳</span>
+            <span className="text-[10px]">Betsy</span>
+          </Link>
+          
+          <Link
+            to="/meal-planning"
+            className={`flex flex-col items-center justify-center gap-1 transition-colors ${
+              isActive('/meal-planning') ? 'text-[#EA6A47]' : 'text-gray-500'
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+            <span className="text-[10px]">Planner</span>
+          </Link>
+          
+          <Link
+            to="/recipes"
+            className={`flex flex-col items-center justify-center gap-1 transition-colors ${
+              isActive('/recipes') ? 'text-[#EA6A47]' : 'text-gray-500'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span className="text-[10px]">Recipes</span>
+          </Link>
+          
+          <Link
+            to="/shopping-lists"
+            className={`flex flex-col items-center justify-center gap-1 transition-colors ${
+              isActive('/shopping-lists') ? 'text-[#EA6A47]' : 'text-gray-500'
+            }`}
+          >
+            <ShoppingBag className="w-5 h-5" />
+            <span className="text-[10px]">Shopping</span>
+          </Link>
+        </div>
+      </nav>
+      
+      {/* Floating Betsy Button (only show on pages other than Betsy's dedicated page) */}
+      {location.pathname !== '/' && <BetsyButton />}
+    </div>
+  )
+}
 
 function App() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [showRecipeForm, setShowRecipeForm] = useState(false)
 
-  console.log('App: Rendering with createElement')
-  
   const handleEditRecipe = (recipe: Recipe) => {
     setEditingRecipe(recipe)
     setShowRecipeForm(true)
@@ -218,7 +272,6 @@ function App() {
   const handleSaveRecipe = (recipe: Recipe) => {
     setEditingRecipe(null)
     setShowRecipeForm(false)
-    // Force a re-render by updating the component
     window.location.reload()
   }
 
@@ -229,41 +282,27 @@ function App() {
 
   const RecipesPage = () => {
     if (showRecipeForm) {
-      return React.createElement(RecipeForm, {
-        recipe: editingRecipe || undefined,
-        onSave: handleSaveRecipe,
-        onCancel: handleCancelRecipe
-      })
+      return <RecipeForm 
+        recipe={editingRecipe || undefined}
+        onSave={handleSaveRecipe}
+        onCancel={handleCancelRecipe}
+      />
     }
 
-    return React.createElement(RecipeList, {
-      onEdit: handleEditRecipe,
-      onAdd: handleAddRecipe
-    })
+    return <RecipeList 
+      onEdit={handleEditRecipe}
+      onAdd={handleAddRecipe}
+    />
   }
 
-  return React.createElement(Routes, null, [
-    React.createElement(Route, {
-      key: 'home',
-      path: '/',
-      element: React.createElement(Layout, null, React.createElement(BetsyPage))
-    }),
-    React.createElement(Route, {
-      key: 'recipes',
-      path: '/recipes',
-      element: React.createElement(Layout, null, React.createElement(RecipesPage))
-    }),
-    React.createElement(Route, {
-      key: 'meal-planning',
-      path: '/meal-planning',
-      element: React.createElement(Layout, null, React.createElement(MealPlanningPage))
-    }),
-    React.createElement(Route, {
-      key: 'shopping-lists',
-      path: '/shopping-lists',
-      element: React.createElement(Layout, null, React.createElement(ShoppingListPage))
-    })
-  ])
+  return (
+    <Routes>
+      <Route path="/" element={<Layout><BetsyPage /></Layout>} />
+      <Route path="/recipes" element={<Layout><RecipesPage /></Layout>} />
+      <Route path="/meal-planning" element={<Layout><MealPlanningPage /></Layout>} />
+      <Route path="/shopping-lists" element={<Layout><ShoppingListPage /></Layout>} />
+    </Routes>
+  )
 }
 
 export default App

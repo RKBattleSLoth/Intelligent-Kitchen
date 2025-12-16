@@ -208,7 +208,37 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
-      case 'clear_meals':
+      case 'clear_shopping_list':
+        if (entities.checkedOnly) {
+          try {
+            await shoppingListService.clearCompletedItems();
+            addBetsyMessage("Done! I've cleared the completed items from your shopping list.", {
+              type: 'shopping_list',
+              details: 'Cleared completed items',
+              success: true
+            });
+          } catch (e) {
+            addBetsyMessage("I had trouble clearing the items. Please try again.");
+          }
+        } else {
+          addBetsyMessage("To clear your entire list, please use the 'Clear List' button on the Shopping List page. I can clear just the checked items if you say 'remove checked items'.");
+        }
+        break;
+
+      case 'mark_all_completed':
+        try {
+          await shoppingListService.markAllAsCompleted();
+          addBetsyMessage("Done! I've marked every item on your list as checked.", {
+            type: 'shopping_list',
+            details: 'All items marked complete',
+            success: true
+          });
+        } catch (e) {
+          addBetsyMessage("I couldn't mark the items as completed. Please try again.");
+        }
+        break;
+
+      case 'generate_meals':
         if (entities.timeRange) {
           try {
             const result = await betsyService.clearMeals(entities.timeRange);
@@ -450,6 +480,155 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'double_recipe':
+        if (entities.recipeName) {
+          try {
+            const multiplier = entities.multiplier || 2;
+            const multiplierWord = multiplier === 2 ? 'doubled' : multiplier === 3 ? 'tripled' : `multiplied by ${multiplier}`;
+            
+            // First find the recipe (from saved recipes or meal plan)
+            let recipe = null;
+            const savedRecipes = await recipeService.getAllRecipes();
+            recipe = savedRecipes.find(r => 
+              r.name.toLowerCase().includes(entities.recipeName!.toLowerCase())
+            );
+            
+            // If not found in saved recipes, check meal plans
+            if (!recipe) {
+              const allPlans = mealPlanService.getAllMealPlans();
+              for (const plan of allPlans) {
+                for (const meal of plan.meals) {
+                  if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase())) {
+                    recipe = meal.recipe;
+                    break;
+                  }
+                }
+                if (recipe) break;
+              }
+            }
+            
+            if (!recipe) {
+              addBetsyMessage(`I couldn't find a recipe called "${entities.recipeName}". Make sure it's in your recipes or meal plan.`);
+              break;
+            }
+            
+            // Get shopping list items and find ones that match recipe ingredients
+            const shoppingItems = await shoppingListService.getShoppingListItems();
+            const recipeIngredients = recipe.ingredients || [];
+            
+            if (recipeIngredients.length === 0) {
+              addBetsyMessage(`"${recipe.name}" doesn't have any ingredients listed.`);
+              break;
+            }
+            
+            // Find matching items in shopping list and double their quantities
+            let updatedCount = 0;
+            const updatedItems: string[] = [];
+            
+            // Helper to extract just the ingredient name (strip quantity and unit)
+            const extractIngredientName = (text: string): string => {
+              return text
+                .toLowerCase()
+                .replace(/^[\d.\/\s]+/, '') // Remove leading numbers
+                .replace(/^(cups?|tbsp?|tsp?|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cans?|packages?|boxes?|bags?|bunch|head|cloves?|slices?|pieces?|large|medium|small|fresh|dried|chopped|minced|diced)\s+/i, '') // Remove units and modifiers
+                .replace(/^of\s+/i, '') // Remove "of"
+                .trim();
+            };
+            
+            // Simple stemming - remove common plural endings
+            const stem = (word: string): string => {
+              return word.replace(/ies$/, 'y').replace(/es$/, '').replace(/s$/, '');
+            };
+            
+            // Extract key words (nouns) from ingredient for flexible matching
+            const getKeyWords = (text: string): string[] => {
+              const cleaned = text.toLowerCase()
+                .replace(/[\d.\/]+/g, '') // Remove numbers
+                .replace(/\b(cups?|tbsp?|tsp?|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cans?|packages?|boxes?|bags?|bunch|head|cloves?|slices?|pieces?|large|medium|small|fresh|dried|chopped|minced|diced|of|and|or|to|for)\b/gi, '')
+                .trim();
+              return cleaned.split(/\s+/).filter(w => w.length > 1); // Allow 2-char words like "egg" stem
+            };
+            
+            for (const ingredient of recipeIngredients) {
+              const rawIngredient = typeof ingredient === 'string' 
+                ? ingredient 
+                : (ingredient.name || ingredient).toString();
+              const ingredientName = extractIngredientName(rawIngredient);
+              const ingredientKeyWords = getKeyWords(rawIngredient);
+              
+              // Find matching shopping list item
+              const matchingItem = shoppingItems.find(item => {
+                const itemText = (item.item_text || '').toLowerCase();
+                const itemName = extractIngredientName(item.name || item.item_text || '');
+                const itemKeyWords = getKeyWords(item.item_text || '');
+                
+                // Check multiple matching strategies
+                if (itemName.includes(ingredientName) || ingredientName.includes(itemName)) return true;
+                if (itemText.includes(ingredientName)) return true;
+                
+                // Check if key ingredient words match (with stemming)
+                if (ingredientKeyWords.length > 0 && ingredientKeyWords.every(word => 
+                  itemText.includes(word) || itemText.includes(stem(word)) || 
+                  itemKeyWords.some(iw => stem(iw) === stem(word))
+                )) return true;
+                
+                // Check if key item words match ingredient (with stemming)
+                if (itemKeyWords.length > 0 && itemKeyWords.some(word => 
+                  rawIngredient.toLowerCase().includes(word) || 
+                  rawIngredient.toLowerCase().includes(stem(word)) ||
+                  ingredientKeyWords.some(ik => stem(ik) === stem(word))
+                )) return true;
+                
+                return false;
+              });
+              
+              if (matchingItem) {
+                // Parse the quantity from the item_text (e.g., "2 cups flour" -> 2)
+                const itemText = matchingItem.item_text || '';
+                const qtyMatch = itemText.match(/^([\d.\/]+)\s*/);
+                const currentQty = qtyMatch ? parseFloat(qtyMatch[1]) || 1 : 1;
+                const newQty = currentQty * multiplier;
+                
+                // Reconstruct item_text with new quantity
+                let newItemText = itemText;
+                if (qtyMatch) {
+                  // Replace the existing quantity
+                  newItemText = itemText.replace(/^[\d.\/]+/, newQty.toString());
+                } else {
+                  // Prepend the quantity if there wasn't one
+                  newItemText = `${newQty} ${itemText}`;
+                }
+                
+                // Update both quantity and item_text
+                await shoppingListService.updateShoppingListItem(matchingItem.id, {
+                  quantity: newQty.toString(),
+                  item_text: newItemText
+                });
+                updatedCount++;
+                updatedItems.push(matchingItem.name || matchingItem.item_text || 'item');
+              }
+            }
+            
+            if (updatedCount > 0) {
+              const itemList = updatedItems.slice(0, 3).join(', ');
+              const moreText = updatedItems.length > 3 ? ` and ${updatedItems.length - 3} more` : '';
+              addBetsyMessage(
+                `Done! I've ${multiplierWord} the quantities for ${updatedCount} item${updatedCount > 1 ? 's' : ''}: ${itemList}${moreText}.`,
+                { type: 'shopping_list', details: `${multiplierWord} ${updatedCount} items`, success: true }
+              );
+            } else {
+              addBetsyMessage(
+                `I couldn't find any "${recipe.name}" ingredients in your shopping list. Try adding the recipe ingredients first with "add ${recipe.name} ingredients to shopping list".`
+              );
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble updating the quantities. Please try again.");
+          }
+        } else {
+          addBetsyMessage("Which recipe would you like to double? Try 'double the spaghetti bolognese'.");
+        }
+        break;
+
       case 'move_meal':
         if (entities.fromDay && entities.fromMealType && entities.toDay && entities.toMealType) {
           try {
@@ -505,6 +684,113 @@ export const BetsyPage: React.FC = () => {
         }
         break;
 
+      case 'swap_all_meals':
+        if (entities.day1 && entities.day2) {
+          try {
+            const date1 = getDateFromDayName(entities.day1);
+            const date2 = getDateFromDayName(entities.day2);
+            const mealTypes = ['Breakfast', 'Lunch', 'Dinner'];
+            let swappedCount = 0;
+            const swappedMeals: string[] = [];
+            
+            for (const mealType of mealTypes) {
+              const meal1 = mealPlanService.getPlannedMeal(date1, mealType);
+              const meal2 = mealPlanService.getPlannedMeal(date2, mealType);
+              
+              if (meal1 || meal2) {
+                // Remove both meals first
+                if (meal1) mealPlanService.removePlannedMeal(date1, mealType);
+                if (meal2) mealPlanService.removePlannedMeal(date2, mealType);
+                
+                // Swap them
+                if (meal2) mealPlanService.addPlannedMeal(date1, mealType, meal2.recipe);
+                if (meal1) mealPlanService.addPlannedMeal(date2, mealType, meal1.recipe);
+                
+                if (meal1 && meal2) {
+                  swappedMeals.push(`${mealType.toLowerCase()}`);
+                  swappedCount++;
+                } else if (meal1 || meal2) {
+                  swappedMeals.push(`${mealType.toLowerCase()} (moved)`);
+                  swappedCount++;
+                }
+              }
+            }
+            
+            if (swappedCount > 0) {
+              addBetsyMessage(`Done! I've swapped ${swappedMeals.join(', ')} between ${entities.day1} and ${entities.day2}.`, {
+                type: 'meal_plan',
+                details: `Swapped ${swappedCount} meal(s)`,
+                success: true
+              });
+            } else {
+              addBetsyMessage(`Neither ${entities.day1} nor ${entities.day2} has any meals to swap.`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble swapping those days. Please try again.");
+          }
+        } else {
+          addBetsyMessage("I need to know which two days to swap. Try 'switch Wednesday and Thursday'.");
+        }
+        break;
+
+      case 'save_recipe':
+        if (entities.recipeName) {
+          try {
+            // First check if it already exists in saved recipes
+            const existingRecipes = await recipeService.getAllRecipes();
+            const alreadySaved = existingRecipes.find(r => 
+              r.name.toLowerCase() === entities.recipeName!.toLowerCase()
+            );
+            if (alreadySaved) {
+              addBetsyMessage(`"${alreadySaved.name}" is already in your recipes!`);
+              break;
+            }
+            
+            // Search through all meal plans for a matching AI-generated recipe
+            const allPlans = mealPlanService.getAllMealPlans();
+            let foundRecipe = null;
+            
+            for (const plan of allPlans) {
+              for (const meal of plan.meals) {
+                if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase())) {
+                  // Check if it's an AI-generated recipe (not already in user's collection)
+                  const isUserRecipe = existingRecipes.some(r => r.id === meal.recipe.id);
+                  if (!isUserRecipe) {
+                    foundRecipe = meal.recipe;
+                    break;
+                  }
+                }
+              }
+              if (foundRecipe) break;
+            }
+            
+            if (foundRecipe) {
+              // Save the recipe to the collection
+              const savedRecipe = await recipeService.createRecipe({
+                name: foundRecipe.name,
+                instructions: foundRecipe.instructions || '',
+                ingredients: foundRecipe.ingredients || [],
+                prepTime: foundRecipe.prepTime,
+                cookTime: foundRecipe.cookTime,
+                servings: foundRecipe.servings,
+                category: foundRecipe.category || 'Dinner'
+              });
+              addBetsyMessage(`Done! I've saved "${savedRecipe.name}" to your recipes. You can find it on the Recipes page.`, {
+                type: 'recipe',
+                details: `Saved: ${savedRecipe.name}`,
+                success: true
+              });
+            } else {
+              addBetsyMessage(`I couldn't find "${entities.recipeName}" in your meal plan. Make sure the recipe is on your meal planning calendar.`);
+            }
+          } catch (e) {
+            addBetsyMessage("I had trouble saving that recipe. Please try again.");
+          }
+        } else {
+          addBetsyMessage("Which recipe would you like me to save? Try 'save Breakfast Burritos to recipes'.");
+        }
+        break;
+
       case 'delete_recipe':
         if (entities.recipeName) {
           try {
@@ -553,6 +839,72 @@ export const BetsyPage: React.FC = () => {
         break;
 
       case 'create_recipe':
+        if (entities.recipeName) {
+          try {
+            const existingRecipes = await recipeService.getAllRecipes();
+            const alreadySaved = existingRecipes.find(r => r.name.toLowerCase() === entities.recipeName!.toLowerCase());
+            
+            if (alreadySaved) {
+              addBetsyMessage(`"${alreadySaved.name}" is already in your recipes! I'll take you there.`, { type: 'recipe', details: alreadySaved.name, success: true });
+              navigate('/recipes');
+              return;
+            }
+
+            const allPlans = mealPlanService.getAllMealPlans();
+            let foundRecipe = null;
+            let bestMatch = null;
+
+            // Search all plans for the best matching recipe
+            for (const plan of allPlans) {
+              for (const meal of plan.meals) {
+                 if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase()) || 
+                     entities.recipeName!.toLowerCase().includes(meal.recipe.name.toLowerCase())) {
+                    
+                    const isUserRecipe = existingRecipes.some(r => r.id === meal.recipe.id);
+                    console.log(`[BetsyPage] Found match: "${meal.recipe.name}" (Instructions: ${meal.recipe.instructions?.length || 0} chars, Ingredients: ${meal.recipe.ingredients?.length || 0})`);
+                    
+                    if (!isUserRecipe) {
+                      // Check quality of this match
+                      const hasInstructions = meal.recipe.instructions && meal.recipe.instructions.length > 50;
+                      const hasIngredients = meal.recipe.ingredients && meal.recipe.ingredients.length > 0;
+                      
+                      // If we haven't found a match yet, take this one
+                      if (!bestMatch) {
+                        bestMatch = meal.recipe;
+                        console.log('[BetsyPage] New best match (first)');
+                      } 
+                      // If this match is better (has details while current best doesn't), take it
+                      else if ((hasInstructions || hasIngredients) && 
+                               (!bestMatch.instructions || bestMatch.instructions.length <= 50) && 
+                               (!bestMatch.ingredients || bestMatch.ingredients.length === 0)) {
+                        bestMatch = meal.recipe;
+                        console.log('[BetsyPage] New best match (better quality)');
+                      }
+                    }
+                 }
+              }
+            }
+            
+            foundRecipe = bestMatch;
+
+            if (foundRecipe) {
+              const savedRecipe = await recipeService.createRecipe({
+                name: foundRecipe.name,
+                instructions: foundRecipe.instructions || '',
+                ingredients: foundRecipe.ingredients || [],
+                prepTime: foundRecipe.prepTime,
+                cookTime: foundRecipe.cookTime,
+                servings: foundRecipe.servings,
+                category: foundRecipe.category || 'Dinner'
+              });
+              addBetsyMessage(`I found "${foundRecipe.name}" in your meal plan and saved it to your recipes!`, { type: 'recipe', details: savedRecipe.name, success: true });
+              return;
+            }
+          } catch (e) {
+            console.error('Error checking meal plan for recipe:', e);
+          }
+        }
+
         addBetsyMessage(
           entities.recipeName 
             ? `Let's create a recipe for ${entities.recipeName}! I'll take you to the recipes page where you can add all the details.`
@@ -707,11 +1059,11 @@ export const BetsyPage: React.FC = () => {
     }, [
       React.createElement('h1', {
         key: 'title',
-        style: { fontSize: '2rem', color: '#f1f5f9', margin: 0 }
-      }, '👩‍🍳 Betsy'),
+        style: { fontSize: '2rem', color: '#1a1a1a', margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }
+      }, 'Betsy'),
       React.createElement('p', {
         key: 'subtitle',
-        style: { color: '#94a3b8', margin: '0.5rem 0 0 0' }
+        style: { color: '#4b5563', margin: '0.5rem 0 0 0' }
       }, 'Your Kitchen Assistant')
     ]),
 
@@ -722,9 +1074,11 @@ export const BetsyPage: React.FC = () => {
         flex: 1,
         overflowY: 'auto',
         padding: '1rem',
-        background: '#1e293b',
+        background: '#ffffff',
         borderRadius: '0.75rem',
-        marginBottom: '1rem'
+        marginBottom: '1rem',
+        border: '1px solid #e5e7eb',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }
     }, [
       ...messages.map(msg => 
@@ -741,8 +1095,8 @@ export const BetsyPage: React.FC = () => {
               maxWidth: '80%',
               padding: '0.75rem 1rem',
               borderRadius: msg.role === 'user' ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0',
-              background: msg.role === 'user' ? '#6366f1' : '#334155',
-              color: '#f1f5f9'
+              background: msg.role === 'user' ? '#0fc7b9' : '#f3f4f6',
+              color: msg.role === 'user' ? '#ffffff' : '#1a1a1a'
             }
           }, [
             React.createElement('div', {
@@ -786,8 +1140,8 @@ export const BetsyPage: React.FC = () => {
             maxWidth: '80%',
             padding: '0.75rem 1rem',
             borderRadius: '1rem 1rem 0 1rem',
-            background: '#4f46e5',
-            color: '#e0e7ff',
+            background: '#2a6f6f',
+            color: '#ffffff',
             fontStyle: 'italic',
             opacity: 0.8
           }
@@ -806,10 +1160,10 @@ export const BetsyPage: React.FC = () => {
           style: {
             padding: '0.75rem 1rem',
             borderRadius: '1rem 1rem 1rem 0',
-            background: '#334155',
-            color: '#94a3b8'
+            background: '#f3f4f6',
+            color: '#4b5563'
           }
-        }, '⏳ Thinking...')
+        }, 'Thinking...')
       ),
       React.createElement('div', { key: 'scroll-anchor', ref: messagesEndRef })
     ]),
@@ -830,7 +1184,7 @@ export const BetsyPage: React.FC = () => {
         type: 'button',
         onClick: toggleListening,
         style: {
-          background: isListening ? '#f97316' : '#6366f1',
+          background: isListening ? '#EA6A47' : '#0fc7b9',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
@@ -842,7 +1196,8 @@ export const BetsyPage: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          animation: isListening ? 'pulse 1s ease-in-out infinite' : 'none'
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          transition: 'all 0.2s'
         }
       }, isListening ? '🛑' : '🎤'),
 
@@ -859,11 +1214,12 @@ export const BetsyPage: React.FC = () => {
           flex: 1,
           padding: '1rem',
           borderRadius: '1.5rem',
-          border: '1px solid #475569',
-          background: '#0f172a',
-          color: '#f1f5f9',
+          border: '1px solid #e5e7eb',
+          background: '#ffffff',
+          color: '#1a1a1a',
           fontSize: '1rem',
-          outline: 'none'
+          outline: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }
       }),
 
@@ -873,7 +1229,7 @@ export const BetsyPage: React.FC = () => {
         type: 'submit',
         disabled: !inputText.trim() || isProcessing,
         style: {
-          background: inputText.trim() ? '#10b981' : '#475569',
+          background: inputText.trim() ? '#0fc7b9' : '#d1d5db',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
@@ -884,7 +1240,9 @@ export const BetsyPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          flexShrink: 0
+          flexShrink: 0,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          transition: 'all 0.2s'
         }
       }, '➤')
     ]),
@@ -895,7 +1253,7 @@ export const BetsyPage: React.FC = () => {
       style: {
         textAlign: 'center',
         marginTop: '0.75rem',
-        color: '#f97316',
+        color: '#EA6A47',
         fontSize: '0.875rem',
         fontWeight: 'bold'
       }

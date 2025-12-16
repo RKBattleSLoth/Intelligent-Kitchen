@@ -85,8 +85,8 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
     React.createElement('div', {
       key: 'modal',
       style: {
-        background: '#1e293b',
-        border: '1px solid #334155',
+        background: '#ffffff',
+        border: '1px solid #e5e7eb',
         borderRadius: '0.5rem',
         padding: '2rem',
         maxWidth: '600px',
@@ -107,7 +107,7 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
       }, [
         React.createElement('h2', {
           key: 'title',
-          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1a1a1a' }
         }, `Select ${mealSlot} Recipe`),
         React.createElement('button', {
           key: 'close',
@@ -117,7 +117,7 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
             border: 'none',
             fontSize: '1.5rem',
             cursor: 'pointer',
-            color: '#94a3b8'
+            color: '#4b5563'
           }
         }, '×')
       ]),
@@ -125,7 +125,7 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
       // Date display
       React.createElement('p', {
         key: 'date',
-        style: { color: '#94a3b8', marginBottom: '1rem' }
+        style: { color: '#4b5563', marginBottom: '1rem' }
       }, `Date: ${new Date(date).toLocaleDateString()}`),
 
       // Search
@@ -138,11 +138,11 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
         style: {
           width: '100%',
           padding: '0.75rem',
-          border: '1px solid #4b5563',
+          border: '1px solid #d1d5db',
           borderRadius: '0.375rem',
           fontSize: '1rem',
-          background: '#0f172a',
-          color: '#f9fafb',
+          background: '#ffffff',
+          color: '#1a1a1a',
           marginBottom: '1rem'
         }
       }),
@@ -171,11 +171,11 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
       }, 
         loading 
           ? React.createElement('div', {
-              style: { textAlign: 'center', padding: '2rem', color: '#94a3b8' }
+              style: { textAlign: 'center', padding: '2rem', color: '#4b5563' }
             }, 'Loading recipes...')
           : filteredRecipes.length === 0
             ? React.createElement('div', {
-                style: { textAlign: 'center', padding: '2rem', color: '#94a3b8' }
+                style: { textAlign: 'center', padding: '2rem', color: '#4b5563' }
               }, searchTerm 
                 ? 'No recipes found matching your search'
                 : `No ${mealSlot} recipes found. Try adding one first!`)
@@ -185,11 +185,11 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
                   onClick: () => onSelectRecipe(recipe),
                   style: {
                     padding: '1rem',
-                    border: '1px solid #334155',
+                    border: '1px solid #e5e7eb',
                     borderRadius: '0.375rem',
                     marginBottom: '0.5rem',
                     cursor: 'pointer',
-                    background: '#0f172a',
+                    background: '#ffffff',
                     transition: 'background 0.2s'
                   }
                 }, [
@@ -199,14 +199,14 @@ const RecipeSelectionModal: React.FC<RecipeSelectionModalProps> = ({
                       fontSize: '1rem',
                       fontWeight: 'bold',
                       marginBottom: '0.5rem',
-                      color: '#f1f5f9'
+                      color: '#1a1a1a'
                     }
                   }, recipe.name),
                   React.createElement('p', {
                     key: 'preview',
                     style: {
                       fontSize: '0.875rem',
-                      color: '#94a3b8',
+                      color: '#4b5563',
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -729,16 +729,16 @@ export const MealPlanningPage: React.FC = () => {
       }, [
         React.createElement('h2', {
           key: 'title',
-          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1a1a1a' }
         }, `Add New ${selectedSlot.mealSlot} Recipe`),
         React.createElement('button', {
           key: 'back',
           onClick: () => setShowRecipeForm(false),
           style: {
             padding: '0.5rem 1rem',
-            background: '#374151',
-            color: '#f1f5f9',
-            border: '1px solid #4b5563',
+            background: '#f3f4f6',
+            color: '#1a1a1a',
+            border: '1px solid #d1d5db',
             borderRadius: '0.375rem',
             cursor: 'pointer'
           }
@@ -781,7 +781,7 @@ export const MealPlanningPage: React.FC = () => {
       }, [
         React.createElement('h1', {
           key: 'title',
-          style: { fontSize: '2rem', fontWeight: 'bold', color: '#f1f5f9' }
+          style: { fontSize: '2rem', fontWeight: 'bold', color: '#1a1a1a' }
         }, '📅 Meal Planning'),
         
         // Week navigation
@@ -798,9 +798,9 @@ export const MealPlanningPage: React.FC = () => {
             },
             style: {
               padding: '0.5rem 1rem',
-              background: '#374151',
-              color: '#f1f5f9',
-              border: '1px solid #4b5563',
+              background: '#f3f4f6',
+              color: '#1a1a1a',
+              border: '1px solid #d1d5db',
               borderRadius: '0.375rem',
               cursor: 'pointer',
               fontSize: '0.95rem'
@@ -809,7 +809,7 @@ export const MealPlanningPage: React.FC = () => {
           React.createElement('span', {
             key: 'current-week',
             style: { 
-              color: '#f1f5f9', 
+              color: '#1a1a1a', 
               fontWeight: 'bold',
               minWidth: '180px',
               textAlign: 'center',
@@ -825,9 +825,9 @@ export const MealPlanningPage: React.FC = () => {
             },
             style: {
               padding: '0.5rem 1rem',
-              background: '#374151',
-              color: '#f1f5f9',
-              border: '1px solid #4b5563',
+              background: '#f3f4f6',
+              color: '#1a1a1a',
+              border: '1px solid #d1d5db',
               borderRadius: '0.375rem',
               cursor: 'pointer',
               fontSize: '0.95rem'
@@ -917,7 +917,7 @@ export const MealPlanningPage: React.FC = () => {
           disabled: selectedDates.size === 0,
           style: {
             padding: '0.6rem 1.25rem',
-            background: selectedDates.size === 0 ? '#475569' : '#6366f1',
+            background: selectedDates.size === 0 ? '#d1d5db' : '#0fc7b9',
             color: 'white',
             border: '1px solid #4c51bf',
             borderRadius: '0.375rem',
@@ -934,7 +934,7 @@ export const MealPlanningPage: React.FC = () => {
           disabled: selectedDates.size === 0,
           style: {
             padding: '0.6rem 1.25rem',
-            background: selectedDates.size === 0 ? '#475569' : '#dc2626',
+            background: selectedDates.size === 0 ? '#d1d5db' : '#dc2626',
             color: 'white',
             border: `1px solid ${selectedDates.size === 0 ? '#4b5563' : '#b91c1c'}`,
             borderRadius: '0.375rem',
@@ -967,16 +967,16 @@ export const MealPlanningPage: React.FC = () => {
     React.createElement('div', {
       key: 'filters',
       style: {
-        background: '#1e293b',
+        background: '#ffffff',
         padding: '1rem',
         borderRadius: '0.5rem',
-        border: '1px solid #334155',
+        border: '1px solid #e5e7eb',
         marginBottom: '2rem'
       }
     }, [
       React.createElement('h3', {
         key: 'filters-title',
-        style: { fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
+        style: { fontSize: '1rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1a1a1a' }
       }, 'Meal Slots to Display:'),
       React.createElement('div', {
         key: 'filter-buttons',
@@ -991,9 +991,9 @@ export const MealPlanningPage: React.FC = () => {
           onClick: () => handleFilterToggle(mealSlot as keyof MealPlanFilters),
           style: {
             padding: '0.5rem 1rem',
-            background: filters[mealSlot as keyof MealPlanFilters] ? '#3b82f6' : '#374151',
-            color: '#f1f5f9',
-            border: '1px solid #4b5563',
+            background: filters[mealSlot as keyof MealPlanFilters] ? '#0fc7b9' : '#f3f4f6',
+            color: '#1a1a1a',
+            border: '1px solid #d1d5db',
             borderRadius: '0.375rem',
             cursor: 'pointer'
           }
@@ -1024,10 +1024,10 @@ export const MealPlanningPage: React.FC = () => {
           style: {
             textAlign: 'center',
             padding: '0.75rem 0.5rem 0.5rem',
-            background: isSelected ? 'rgba(251, 191, 36, 0.18)' : '#1e293b',
-            border: `2px solid ${isSelected ? '#f59e0b' : '#334155'}`,
+            background: isSelected ? 'rgba(251, 191, 36, 0.18)' : '#ffffff',
+            border: `2px solid ${isSelected ? '#f59e0b' : '#e5e7eb'}`,
             borderRadius: '0.375rem',
-            color: '#f1f5f9',
+            color: '#1a1a1a',
             fontWeight: 'bold',
             position: 'relative',
             cursor: isSelectingDays ? 'pointer' : 'default',
@@ -1048,13 +1048,13 @@ export const MealPlanningPage: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#1e293b',
+              color: '#1a1a1a',
               fontSize: '0.75rem',
               fontWeight: 700
             }
           }, isSelected ? '✓' : ''),
           React.createElement('div', { key: 'day' }, date.toLocaleDateString('en-US', { weekday: 'short' })),
-          React.createElement('div', { key: 'date', style: { fontSize: '0.875rem', color: '#94a3b8' } }, 
+          React.createElement('div', { key: 'date', style: { fontSize: '0.875rem', color: '#4b5563' } }, 
             date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
           React.createElement('button', {
             key: 'add-day-shopping',
@@ -1072,7 +1072,7 @@ export const MealPlanningPage: React.FC = () => {
               position: 'absolute',
               top: '0.25rem',
               right: '0.25rem',
-              background: isSelectingDays ? '#475569' : '#3b82f6',
+              background: isSelectingDays ? '#d1d5db' : '#0fc7b9',
               color: '#ffffff',
               border: 'none',
               borderRadius: '0.25rem',
@@ -1092,10 +1092,10 @@ export const MealPlanningPage: React.FC = () => {
           key: `label-${mealSlot}`,
           style: {
             padding: '0.5rem',
-            background: '#1e293b',
-            border: '1px solid #334155',
+            background: '#ffffff',
+            border: '1px solid #e5e7eb',
             borderRadius: '0.375rem',
-            color: '#f1f5f9',
+            color: '#1a1a1a',
             fontWeight: 'bold',
             textAlign: 'center'
           }
@@ -1112,6 +1112,7 @@ export const MealPlanningPage: React.FC = () => {
 
           return React.createElement('div', {
             key: `${dateStr}-${mealSlot}`,
+            className: plannedMeal ? 'meal-card-container' : '',
             onClick: (e: React.MouseEvent) => !isBeingDragged && !plannedMeal && handleMealSlotClick(dateStr, mealSlot, e),
             onDragOver: (e: React.DragEvent) => handleDragOver(e, dateStr, mealSlot),
             onDragLeave: handleDragLeave,
@@ -1122,8 +1123,8 @@ export const MealPlanningPage: React.FC = () => {
             style: {
               padding: '0.5rem',
               minHeight: '80px',
-              background: isDragOver ? '#1e40af' : dayIsSelected ? 'rgba(251, 191, 36, 0.1)' : (plannedMeal ? '#0f172a' : '#1e293b'),
-              border: isDragOver ? '2px dashed #60a5fa' : dayIsSelected ? '2px solid #f59e0b' : '1px solid #334155',
+              background: isDragOver ? '#e0f2fe' : dayIsSelected ? 'rgba(251, 191, 36, 0.1)' : '#fafafa',
+              border: isDragOver ? '2px dashed #0fc7b9' : dayIsSelected ? '2px solid #f59e0b' : '1px solid #e5e7eb',
               borderRadius: '0.375rem',
               cursor: isSelectingDays ? 'default' : plannedMeal ? 'move' : 'pointer',
               transition: 'all 0.2s',
@@ -1164,7 +1165,7 @@ export const MealPlanningPage: React.FC = () => {
                 style: {
                   fontSize: '0.875rem',
                   fontWeight: 'bold',
-                  color: '#60a5fa',
+                  color: '#035b49',
                   marginBottom: '0.25rem',
                   cursor: 'pointer',
                   textDecoration: 'underline',
@@ -1176,38 +1177,36 @@ export const MealPlanningPage: React.FC = () => {
               }, plannedMeal.recipe.name.length > 100 ? plannedMeal.recipe.name.substring(0, 100) + '...' : plannedMeal.recipe.name),
               React.createElement('div', {
                 key: 'actions',
+                className: 'meal-card-actions',
                 style: {
                   display: 'flex',
-                  gap: '0.5rem',
+                  gap: '0.75rem',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  flexWrap: 'wrap',
-                  marginTop: '0.5rem'
+                  marginTop: '0.5rem',
+                  opacity: 0,
+                  transition: 'opacity 0.2s ease'
                 }
               }, [
                 React.createElement('button', {
                   key: 'change-btn',
                   onClick: (e: React.MouseEvent) => handleMealCardClick(dateStr, mealSlot, e),
                   style: {
-                    flex: '1',
-                    minWidth: '50px',
-                    padding: '0.35rem 0.6rem',
-                    background: '#991b1b',
-                    color: '#fecaca',
-                    border: '1px solid #7f1d1d',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '1.25rem',
                     cursor: 'pointer',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
+                    padding: '0.25rem',
+                    transition: 'transform 0.2s'
                   },
                   onMouseEnter: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.25)'
                   },
                   onMouseLeave: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
-                  }
-                }, '🔄 Change'),
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  },
+                  title: 'Change meal'
+                }, '🔄'),
                 React.createElement('button', {
                   key: 'add-shopping',
                   onClick: async (e: React.MouseEvent) => {
@@ -1220,52 +1219,43 @@ export const MealPlanningPage: React.FC = () => {
                     }
                   },
                   style: {
-                    flex: '1',
-                    minWidth: '50px',
-                    padding: '0.35rem 0.6rem',
-                    background: '#991b1b',
-                    color: '#fecaca',
-                    border: '1px solid #7f1d1d',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '1.25rem',
                     cursor: 'pointer',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
+                    padding: '0.25rem',
+                    transition: 'transform 0.2s'
                   },
                   onMouseEnter: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.25)'
                   },
                   onMouseLeave: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
-                  }
-                }, '🛒 Add'),
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  },
+                  title: 'Add to shopping list'
+                }, '🛒'),
                 React.createElement('button', {
                   key: 'remove',
-                  className: 'remove-button',
                   onClick: (e: React.MouseEvent) => {
                     e.stopPropagation()
                     handleRemoveMeal(dateStr, mealSlot)
                   },
                   style: {
-                    flex: '1',
-                    minWidth: '50px',
-                    padding: '0.35rem 0.6rem',
-                    background: '#991b1b',
-                    color: '#fecaca',
-                    border: '1px solid #7f1d1d',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '1.25rem',
                     cursor: 'pointer',
-                    fontWeight: '500',
-                    transition: 'all 0.2s'
+                    padding: '0.25rem',
+                    transition: 'transform 0.2s'
                   },
                   onMouseEnter: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#7f1d1d'
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.25)'
                   },
                   onMouseLeave: (e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#991b1b'
-                  }
-                }, '🗑️ Remove')
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  },
+                  title: 'Remove meal'
+                }, '🗑️')
               ])
             ] : [
               React.createElement('div', {
@@ -1328,8 +1318,8 @@ export const MealPlanningPage: React.FC = () => {
       React.createElement('div', {
         key: 'modal',
         style: {
-          background: '#1e293b',
-          border: '1px solid #334155',
+          background: '#ffffff',
+          border: '1px solid #e5e7eb',
           borderRadius: '0.5rem',
           padding: '2rem',
           maxWidth: '400px',
@@ -1339,12 +1329,12 @@ export const MealPlanningPage: React.FC = () => {
       }, [
         React.createElement('h3', {
           key: 'title',
-          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9', marginBottom: '1rem' }
+          style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '1rem' }
         }, 'Confirm Clear Action'),
         
         React.createElement('p', {
           key: 'message',
-          style: { color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.5' }
+          style: { color: '#4b5563', marginBottom: '1.5rem', lineHeight: '1.5' }
         }, 
           clearAction === 'week' ? 'Are you sure you want to clear all meals for the current week? This action cannot be undone.' :
           clearAction === 'all' ? 'Are you sure you want to clear ALL meal plans? This will delete all your saved meal planning data and cannot be undone.' :
@@ -1368,9 +1358,9 @@ export const MealPlanningPage: React.FC = () => {
             },
             style: {
               padding: '0.75rem 1.5rem',
-              background: '#374151',
-              color: '#f1f5f9',
-              border: '1px solid #4b5563',
+              background: '#f3f4f6',
+              color: '#1a1a1a',
+              border: '1px solid #d1d5db',
               borderRadius: '0.375rem',
               cursor: 'pointer'
             }

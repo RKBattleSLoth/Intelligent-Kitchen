@@ -41,6 +41,16 @@ class SmartMealPlanner {
       totalMealsExpected: dayCount * mealTypes.length
     });
 
+    // Fetch user's saved recipes if recipeSource includes them
+    let savedRecipes = [];
+    if ((recipeSource === 'mixed' || recipeSource === 'saved') && userId) {
+      savedRecipes = await this.fetchRecipes(userId, recipeSource);
+      console.log('📚 [SMART_MEAL_PLANNER] Fetched saved recipes:', {
+        count: savedRecipes.length,
+        recipeNames: savedRecipes.slice(0, 10).map(r => r.name)
+      });
+    }
+
     // Build the prompt for meal planning
     const prompt = this.buildMealPlanPrompt({
       startDate,
@@ -49,7 +59,8 @@ class SmartMealPlanner {
       preferences,
       constraints,
       recipeSource,
-      peopleCount
+      peopleCount,
+      savedRecipes
     });
 
     console.log('🤖 [SMART_MEAL_PLANNER] AI Service Check:', {
@@ -239,24 +250,55 @@ class SmartMealPlanner {
       preferences,
       constraints,
       recipeSource,
-      peopleCount
+      peopleCount,
+      savedRecipes = []
     } = options;
 
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
     const dayCount = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
+    const totalMeals = dayCount * mealTypes.length;
 
-    let prompt = `Generate ${dayCount * mealTypes.length} meals for ${peopleCount} people from ${startDate} to ${endDate}.
+    // Build saved recipes section if available
+    let savedRecipesSection = '';
+    if (savedRecipes.length > 0 && (recipeSource === 'mixed' || recipeSource === 'saved')) {
+      const recipeList = savedRecipes.slice(0, 20).map(r => {
+        const category = r.category || 'any';
+        return `- "${r.name}" (${category})`;
+      }).join('\n');
+      
+      if (recipeSource === 'saved') {
+        savedRecipesSection = `
+IMPORTANT: Use ONLY these saved recipes from the user's collection:
+${recipeList}
+
+You must use these exact recipe names. For each, provide full instructions and ingredients.`;
+      } else {
+        // Mixed mode - use some saved, generate some new
+        const savedCount = Math.min(Math.ceil(totalMeals * 0.5), savedRecipes.length); // Use ~50% saved recipes
+        savedRecipesSection = `
+The user has these saved recipes - use approximately ${savedCount} of them in the meal plan:
+${recipeList}
+
+For saved recipes, use the exact name and provide appropriate instructions/ingredients.
+For the remaining ${totalMeals - savedCount} meals, create new recipe suggestions.
+Mix saved and new recipes throughout the week for variety.`;
+      }
+    }
+
+    let prompt = `Generate ${totalMeals} meals for ${peopleCount} people from ${startDate} to ${endDate}.
 Dietary: ${preferences.dietary || 'none'}, Budget: ${preferences.budget || 'moderate'}
 Meal types: ${mealTypes.join(', ')}
+${savedRecipesSection}
 
 Return JSON only:
-{"name":"Week Plan","meals":[{"date":"YYYY-MM-DD","mealType":"breakfast|lunch|dinner","name":"Meal Name","description":"One sentence","instructions":"Preheat oven to 400F. Season chicken with salt and pepper. Roast for 25 minutes until internal temp reaches 165F. Let rest 5 minutes before serving.","ingredients":["2 lbs chicken breast","1 tsp salt","1/2 tsp pepper"],"cookTime":30}]}
+{"name":"Week Plan","meals":[{"date":"YYYY-MM-DD","mealType":"breakfast|lunch|dinner","name":"Meal Name","description":"One sentence","instructions":"Preheat oven to 400F. Season chicken with salt and pepper. Roast for 25 minutes until internal temp reaches 165F. Let rest 5 minutes before serving.","ingredients":["2 lbs chicken breast","1 tsp salt","1/2 tsp pepper"],"cookTime":30,"isUserRecipe":true|false}]}
 
 Requirements:
 - Instructions: 4-6 sentences describing the cooking process (NO numbered steps, just flowing sentences)
 - Ingredients: 5-10 items with exact quantities
-- Description: 1 sentence`;
+- Description: 1 sentence
+- isUserRecipe: true if using a saved recipe name, false if newly generated`;
 
     return prompt;
   }

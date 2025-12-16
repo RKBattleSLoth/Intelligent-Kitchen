@@ -207,6 +207,73 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         break;
 
       case 'create_recipe':
+        if (entities.recipeName) {
+          try {
+            const existingRecipes = await recipeService.getAllRecipes();
+            const alreadySaved = existingRecipes.find(r => r.name.toLowerCase() === entities.recipeName!.toLowerCase());
+            
+            if (alreadySaved) {
+              addBetsyMessage(`"${alreadySaved.name}" is already in your recipes! I'll take you there.`, { type: 'recipe', details: alreadySaved.name, success: true });
+              navigate('/recipes');
+              onClose();
+              return;
+            }
+
+            const allPlans = mealPlanService.getAllMealPlans();
+            let foundRecipe = null;
+            let bestMatch = null;
+            
+            // Search all plans for the best matching recipe
+            for (const plan of allPlans) {
+              for (const meal of plan.meals) {
+                if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase()) || 
+                    entities.recipeName!.toLowerCase().includes(meal.recipe.name.toLowerCase())) {
+                  
+                  const isUserRecipe = existingRecipes.some(r => r.id === meal.recipe.id);
+                  console.log(`[Betsy] Found match: "${meal.recipe.name}" (Instructions: ${meal.recipe.instructions?.length || 0} chars, Ingredients: ${meal.recipe.ingredients?.length || 0})`);
+                  
+                  if (!isUserRecipe) {
+                    // Check quality of this match
+                    const hasInstructions = meal.recipe.instructions && meal.recipe.instructions.length > 50;
+                    const hasIngredients = meal.recipe.ingredients && meal.recipe.ingredients.length > 0;
+                    
+                    // If we haven't found a match yet, take this one
+                    if (!bestMatch) {
+                      bestMatch = meal.recipe;
+                      console.log('[Betsy] New best match (first)');
+                    } 
+                    // If this match is better (has details while current best doesn't), take it
+                    else if ((hasInstructions || hasIngredients) && 
+                             (!bestMatch.instructions || bestMatch.instructions.length <= 50) && 
+                             (!bestMatch.ingredients || bestMatch.ingredients.length === 0)) {
+                      bestMatch = meal.recipe;
+                      console.log('[Betsy] New best match (better quality)');
+                    }
+                  }
+                }
+              }
+            }
+            
+            foundRecipe = bestMatch;
+
+            if (foundRecipe) {
+              const savedRecipe = await recipeService.createRecipe({
+                name: foundRecipe.name,
+                instructions: foundRecipe.instructions || '',
+                ingredients: foundRecipe.ingredients || [],
+                prepTime: foundRecipe.prepTime,
+                cookTime: foundRecipe.cookTime,
+                servings: foundRecipe.servings,
+                category: foundRecipe.category || 'Dinner'
+              });
+              addBetsyMessage(`I found "${foundRecipe.name}" in your meal plan and saved it to your recipes!`, { type: 'recipe', details: savedRecipe.name, success: true });
+              return;
+            }
+          } catch (e) {
+            console.error('Error checking meal plan for recipe:', e);
+          }
+        }
+
         // Navigate to recipes page and trigger the add recipe modal
         addBetsyMessage(
           entities.recipeName 
@@ -357,6 +424,114 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
         }
         break;
 
+      case 'double_recipe':
+        if (entities.recipeName) {
+          const multiplier = entities.multiplier || 2;
+          const multiplierWord = multiplier === 2 ? 'doubled' : multiplier === 3 ? 'tripled' : `${multiplier}x`;
+          
+          let recipe = null;
+          const savedRecipes = await recipeService.getAllRecipes();
+          recipe = savedRecipes.find(r => r.name.toLowerCase().includes(entities.recipeName!.toLowerCase()));
+          
+          if (!recipe) {
+            const allPlans = mealPlanService.getAllMealPlans();
+            for (const plan of allPlans) {
+              for (const meal of plan.meals) {
+                if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase())) {
+                  recipe = meal.recipe;
+                  break;
+                }
+              }
+              if (recipe) break;
+            }
+          }
+          
+          if (!recipe) {
+            addBetsyMessage(`Couldn't find "${entities.recipeName}".`);
+            break;
+          }
+          
+          const shoppingItems = await shoppingListService.getShoppingListItems();
+          const recipeIngredients = recipe.ingredients || [];
+          let updatedCount = 0;
+          
+          // Helper to extract just the ingredient name (strip quantity and unit)
+          const extractIngredientName = (text: string): string => {
+            return text
+              .toLowerCase()
+              .replace(/^[\d.\/\s]+/, '')
+              .replace(/^(cups?|tbsp?|tsp?|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cans?|packages?|boxes?|bags?|bunch|head|cloves?|slices?|pieces?|large|medium|small|fresh|dried|chopped|minced|diced)\s+/i, '')
+              .replace(/^of\s+/i, '')
+              .trim();
+          };
+          
+          const stem = (word: string): string => {
+            return word.replace(/ies$/, 'y').replace(/es$/, '').replace(/s$/, '');
+          };
+          
+          const getKeyWords = (text: string): string[] => {
+            const cleaned = text.toLowerCase()
+              .replace(/[\d.\/]+/g, '')
+              .replace(/\b(cups?|tbsp?|tsp?|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cans?|packages?|boxes?|bags?|bunch|head|cloves?|slices?|pieces?|large|medium|small|fresh|dried|chopped|minced|diced|of|and|or|to|for)\b/gi, '')
+              .trim();
+            return cleaned.split(/\s+/).filter(w => w.length > 1);
+          };
+          
+          for (const ingredient of recipeIngredients) {
+            const rawIngredient = typeof ingredient === 'string' 
+              ? ingredient 
+              : (ingredient.name || ingredient).toString();
+            const ingredientName = extractIngredientName(rawIngredient);
+            const ingredientKeyWords = getKeyWords(rawIngredient);
+            
+            const matchingItem = shoppingItems.find(item => {
+              const itemText = (item.item_text || '').toLowerCase();
+              const itemName = extractIngredientName(item.name || item.item_text || '');
+              const itemKeyWords = getKeyWords(item.item_text || '');
+              
+              if (itemName.includes(ingredientName) || ingredientName.includes(itemName)) return true;
+              if (itemText.includes(ingredientName)) return true;
+              if (ingredientKeyWords.length > 0 && ingredientKeyWords.every(word => 
+                itemText.includes(word) || itemText.includes(stem(word)) || 
+                itemKeyWords.some(iw => stem(iw) === stem(word))
+              )) return true;
+              if (itemKeyWords.length > 0 && itemKeyWords.some(word => 
+                rawIngredient.toLowerCase().includes(word) || 
+                rawIngredient.toLowerCase().includes(stem(word)) ||
+                ingredientKeyWords.some(ik => stem(ik) === stem(word))
+              )) return true;
+              return false;
+            });
+            
+            if (matchingItem) {
+              const itemText = matchingItem.item_text || '';
+              const qtyMatch = itemText.match(/^([\d.\/]+)\s*/);
+              const currentQty = qtyMatch ? parseFloat(qtyMatch[1]) || 1 : 1;
+              const newQty = currentQty * multiplier;
+              
+              let newItemText = itemText;
+              if (qtyMatch) {
+                newItemText = itemText.replace(/^[\d.\/]+/, newQty.toString());
+              } else {
+                newItemText = `${newQty} ${itemText}`;
+              }
+              
+              await shoppingListService.updateShoppingListItem(matchingItem.id, { 
+                quantity: newQty.toString(),
+                item_text: newItemText 
+              });
+              updatedCount++;
+            }
+          }
+          
+          if (updatedCount > 0) {
+            addBetsyMessage(`${multiplierWord} ${updatedCount} items from ${recipe.name}!`, { type: 'shopping_list', details: multiplierWord, success: true });
+          } else {
+            addBetsyMessage(`No "${recipe.name}" ingredients found in shopping list.`);
+          }
+        }
+        break;
+
       case 'move_meal':
         if (entities.fromDay && entities.fromMealType && entities.toDay && entities.toMealType) {
           const fromDate = getDateFromDayName(entities.fromDay);
@@ -400,6 +575,75 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
             if (!meal1) missing.push(`${entities.day1} ${entities.mealType1}`);
             if (!meal2) missing.push(`${entities.day2} ${entities.mealType2}`);
             addBetsyMessage(`Couldn't find meals for: ${missing.join(' and ')}. Check the Meal Planning page to see your scheduled meals.`);
+          }
+        }
+        break;
+
+      case 'swap_all_meals':
+        if (entities.day1 && entities.day2) {
+          const date1 = getDateFromDayName(entities.day1);
+          const date2 = getDateFromDayName(entities.day2);
+          const mealTypes = ['Breakfast', 'Lunch', 'Dinner'];
+          let swappedCount = 0;
+          
+          for (const mealType of mealTypes) {
+            const meal1 = mealPlanService.getPlannedMeal(date1, mealType);
+            const meal2 = mealPlanService.getPlannedMeal(date2, mealType);
+            
+            if (meal1 || meal2) {
+              if (meal1) mealPlanService.removePlannedMeal(date1, mealType);
+              if (meal2) mealPlanService.removePlannedMeal(date2, mealType);
+              if (meal2) mealPlanService.addPlannedMeal(date1, mealType, meal2.recipe);
+              if (meal1) mealPlanService.addPlannedMeal(date2, mealType, meal1.recipe);
+              swappedCount++;
+            }
+          }
+          
+          if (swappedCount > 0) {
+            addBetsyMessage(`Swapped all meals between ${entities.day1} and ${entities.day2}!`, {
+              type: 'meal_plan', details: `Swapped ${swappedCount} meal(s)`, success: true
+            });
+          } else {
+            addBetsyMessage(`Neither day has any meals to swap.`);
+          }
+        }
+        break;
+
+      case 'save_recipe':
+        if (entities.recipeName) {
+          const existingRecipes = await recipeService.getAllRecipes();
+          const alreadySaved = existingRecipes.find(r => r.name.toLowerCase() === entities.recipeName!.toLowerCase());
+          if (alreadySaved) {
+            addBetsyMessage(`"${alreadySaved.name}" is already saved!`);
+            break;
+          }
+          const allPlans = mealPlanService.getAllMealPlans();
+          let foundRecipe = null;
+          for (const plan of allPlans) {
+            for (const meal of plan.meals) {
+              if (meal.recipe.name.toLowerCase().includes(entities.recipeName!.toLowerCase())) {
+                const isUserRecipe = existingRecipes.some(r => r.id === meal.recipe.id);
+                if (!isUserRecipe) {
+                  foundRecipe = meal.recipe;
+                  break;
+                }
+              }
+            }
+            if (foundRecipe) break;
+          }
+          if (foundRecipe) {
+            const savedRecipe = await recipeService.createRecipe({
+              name: foundRecipe.name,
+              instructions: foundRecipe.instructions || '',
+              ingredients: foundRecipe.ingredients || [],
+              prepTime: foundRecipe.prepTime,
+              cookTime: foundRecipe.cookTime,
+              servings: foundRecipe.servings,
+              category: foundRecipe.category || 'Dinner'
+            });
+            addBetsyMessage(`Saved "${savedRecipe.name}" to your recipes!`, { type: 'recipe', details: savedRecipe.name, success: true });
+          } else {
+            addBetsyMessage(`Couldn't find "${entities.recipeName}" in your meal plan.`);
           }
         }
         break;
@@ -514,27 +758,27 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
       maxWidth: 'calc(100vw - 40px)',
       height: '500px',
       maxHeight: 'calc(100vh - 120px)',
-      background: '#1e293b',
+      background: '#ffffff',
       borderRadius: '16px',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+      boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 1000,
-      border: '1px solid #334155'
+      border: '1px solid #e5e7eb'
     }}>
       {/* Header */}
       <div style={{
         padding: '12px 16px',
-        borderBottom: '1px solid #334155',
+        borderBottom: '1px solid #e5e7eb',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <span style={{ color: '#f1f5f9', fontWeight: 'bold', fontSize: '1rem' }}>👩‍🍳 Betsy</span>
+        <span style={{ color: '#1a1a1a', fontWeight: 'bold', fontSize: '1rem' }}>Betsy</span>
         <button onClick={onClose} style={{
           background: 'transparent',
           border: 'none',
-          color: '#94a3b8',
+          color: '#4b5563',
           fontSize: '1.25rem',
           cursor: 'pointer',
           padding: '4px'
@@ -553,8 +797,8 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
               maxWidth: '85%',
               padding: '8px 12px',
               borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '12px 12px 12px 0',
-              background: msg.role === 'user' ? '#6366f1' : '#334155',
-              color: '#f1f5f9',
+              background: msg.role === 'user' ? '#0fc7b9' : '#f3f4f6',
+              color: msg.role === 'user' ? '#ffffff' : '#1a1a1a',
               fontSize: '0.875rem',
               whiteSpace: 'pre-wrap'
             }}>
@@ -579,8 +823,8 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
             <div style={{
               padding: '8px 12px',
               borderRadius: '12px 12px 0 12px',
-              background: '#4f46e5',
-              color: '#e0e7ff',
+              background: '#2a6f6f',
+              color: '#ffffff',
               fontStyle: 'italic',
               opacity: 0.8,
               fontSize: '0.875rem'
@@ -592,8 +836,8 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
             <div style={{
               padding: '8px 12px',
               borderRadius: '12px 12px 12px 0',
-              background: '#334155',
-              color: '#94a3b8',
+              background: '#f3f4f6',
+              color: '#4b5563',
               fontSize: '0.875rem'
             }}>Thinking...</div>
           </div>
@@ -604,12 +848,12 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
       {/* Input */}
       <form onSubmit={handleSubmit} style={{
         padding: '12px',
-        borderTop: '1px solid #334155',
+        borderTop: '1px solid #e5e7eb',
         display: 'flex',
         gap: '8px'
       }}>
         <button type="button" onClick={toggleListening} style={{
-          background: isListening ? '#f97316' : '#6366f1',
+          background: isListening ? '#EA6A47' : '#0fc7b9',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
@@ -630,15 +874,15 @@ export const BetsyChat: React.FC<BetsyChatProps> = ({ isOpen, onClose }) => {
             flex: 1,
             padding: '10px 14px',
             borderRadius: '22px',
-            border: '1px solid #475569',
-            background: '#0f172a',
-            color: '#f1f5f9',
+            border: '1px solid #e5e7eb',
+            background: '#ffffff',
+            color: '#1a1a1a',
             fontSize: '0.875rem',
             outline: 'none'
           }}
         />
         <button type="submit" disabled={!inputText.trim() || isProcessing} style={{
-          background: inputText.trim() ? '#10b981' : '#475569',
+          background: inputText.trim() ? '#0fc7b9' : '#d1d5db',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
@@ -668,10 +912,10 @@ export const BetsyButton: React.FC = () => {
           width: '56px',
           height: '56px',
           borderRadius: '50%',
-          background: isOpen ? '#475569' : '#6366f1',
+          background: isOpen ? '#4b5563' : '#0fc7b9',
           color: 'white',
           border: 'none',
-          boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)',
+          boxShadow: '0 4px 20px rgba(15, 199, 185, 0.4)',
           cursor: 'pointer',
           fontSize: '1.75rem',
           display: 'flex',

@@ -163,6 +163,15 @@ class ShoppingListService {
     this.saveItems(activeItems);
   }
 
+  async markAllAsCompleted(): Promise<void> {
+    const items = this.getItems();
+    items.forEach(item => {
+      item.is_checked = true;
+      item.updated_at = new Date().toISOString();
+    });
+    this.saveItems(items);
+  }
+
   async reorderItems(itemIds: string[]): Promise<void> {
     const items = this.getItems();
     const reorderedItems: ShoppingListItem[] = [];

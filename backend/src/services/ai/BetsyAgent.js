@@ -128,25 +128,34 @@ AVAILABLE INTENTS:
 11. "consolidate_shopping_list" - Merge duplicate items and combine quantities in shopping list
     entities: {}
 
-12. "move_meal" - Move a meal from one slot to another
+12. "double_recipe" - Double the quantities of all ingredients from a recipe in the shopping list
+    entities: { recipeName: string, multiplier?: number }
+
+13. "move_meal" - Move a meal from one slot to another
     entities: { fromDay: string, fromMealType: string, toDay: string, toMealType: string }
 
-13. "swap_meals" - Swap two meals between slots
+14. "swap_meals" - Swap two meals between slots
     entities: { day1: string, mealType1: string, day2: string, mealType2: string }
 
-14. "delete_recipe" - Delete a recipe from the collection
+15. "swap_all_meals" - Swap ALL meals between two days (breakfast, lunch, dinner)
+    entities: { day1: string, day2: string }
+
+16. "save_recipe" - Save an AI-generated recipe from the meal plan to the recipe collection
     entities: { recipeName: string }
 
-15. "search_recipes" - Search saved recipes by keyword
+17. "delete_recipe" - Delete a recipe from the collection
+    entities: { recipeName: string }
+
+18. "search_recipes" - Search saved recipes by keyword
     entities: { query: string }
    
-16. "help" - User needs help or instructions
+19. "help" - User needs help or instructions
     entities: {}
    
-17. "greeting" - User is saying hello or starting conversation
+20. "greeting" - User is saying hello or starting conversation
     entities: {}
    
-18. "unknown" - Cannot determine intent
+22. "mark_all_completed" - Mark all items in shopping list as completed/checked
     entities: {}
 
 RESPONSE FORMAT (JSON only, no markdown):
@@ -176,10 +185,21 @@ EXAMPLES:
 - "add the spaghetti carbonara ingredients to my shopping list" → add_recipe_to_shopping_list with recipeName: "spaghetti carbonara"
 - "consolidate my shopping list" → consolidate_shopping_list
 - "merge duplicate items on my list" → consolidate_shopping_list
+- "double the spaghetti bolognese" → double_recipe with recipeName: "spaghetti bolognese", multiplier: 2
+- "let's make that a double recipe for chicken stir fry" → double_recipe with recipeName: "chicken stir fry", multiplier: 2
+- "triple the pasta ingredients" → double_recipe with recipeName: "pasta", multiplier: 3
 - "move monday's breakfast to tuesday lunch" → move_meal with fromDay: "monday", fromMealType: "breakfast", toDay: "tuesday", toMealType: "lunch"
 - "swap tuesday dinner with wednesday dinner" → swap_meals with day1: "tuesday", mealType1: "dinner", day2: "wednesday", mealType2: "dinner"
+- "switch breakfast for wednesday and thursday" → swap_meals with day1: "wednesday", mealType1: "breakfast", day2: "thursday", mealType2: "breakfast"
+- "exchange monday lunch with friday lunch" → swap_meals with day1: "monday", mealType1: "lunch", day2: "friday", mealType2: "lunch"
+- "switch wednesday and thursday" → swap_all_meals with day1: "wednesday", day2: "thursday"
+- "swap monday with tuesday" → swap_all_meals with day1: "monday", day2: "tuesday"
 - "clear completed items from shopping list" → clear_shopping_list with checkedOnly: true
 - "remove checked items" → clear_shopping_list with checkedOnly: true
+- "mark all items as completed" → mark_all_completed
+- "check off everything on my list" → mark_all_completed
+- "save Breakfast Burritos to recipes" → save_recipe with recipeName: "Breakfast Burritos"
+- "save the chicken stir fry" → save_recipe with recipeName: "chicken stir fry"
 - "delete the pancakes recipe" → delete_recipe with recipeName: "pancakes"
 - "search my recipes for chicken" → search_recipes with query: "chicken"
 - "find recipes with pasta" → search_recipes with query: "pasta"
@@ -228,14 +248,18 @@ Now interpret the user input and respond with JSON only:`;
       add_meal: "I'll add that to your meal plan.",
       remove_shopping_item: "I'll remove that from your list.",
       clear_shopping_list: "I'll clear your shopping list.",
+      mark_all_completed: "I'll mark all items as completed.",
       clear_meals: "I'll clear those meals from your plan.",
       generate_meals: "I'll generate a meal plan for you!",
       import_recipe: "I'll import that recipe for you!",
       search_recipe: "Let me search for that recipe online!",
       add_recipe_to_shopping_list: "I'll add those ingredients to your shopping list!",
       consolidate_shopping_list: "I'll consolidate your shopping list and merge duplicates!",
+      double_recipe: "I'll double those ingredient quantities!",
       move_meal: "I'll move that meal for you!",
       swap_meals: "I'll swap those meals!",
+      swap_all_meals: "I'll swap all meals between those days!",
+      save_recipe: "I'll save that recipe to your collection!",
       delete_recipe: "I'll delete that recipe.",
       search_recipes: "Let me search your recipes!",
       help: "I can help you manage shopping lists, plan meals, import recipes, and more!",
@@ -365,8 +389,24 @@ Now interpret the user input and respond with JSON only:`;
         text.includes('recipe') && 
         !text.includes('import') && !text.includes('http')) {
       // Extract recipe name if provided
+      // First try to match "Add X to my recipes" pattern specifically
+      const addToRecipesMatch = text.match(/add\s+(?:the\s+)?(.+?)\s+to\s+(?:my\s+)?recipes?/i);
+      if (addToRecipesMatch) {
+        return {
+          success: true,
+          intent: 'create_recipe',
+          entities: { 
+            recipeName: addToRecipesMatch[1].trim()
+          },
+          confidence: 0.8,
+          response: `I'll add ${addToRecipesMatch[1].trim()} to your recipes!`,
+          metadata: { method: 'fallback' }
+        };
+      }
+
       const nameMatch = text.match(/(?:recipe\s+for|new\s+recipe\s+for|add\s+(?:a\s+)?(?:new\s+)?recipe\s+for|create\s+(?:a\s+)?recipe\s+for)\s+(.+)/i) ||
                         text.match(/(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?(.+?)\s+recipe/i);
+      
       return {
         success: true,
         intent: 'create_recipe',
@@ -439,19 +479,34 @@ Now interpret the user input and respond with JSON only:`;
       };
     }
 
-    // Swap meals pattern
-    if (text.includes('swap')) {
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    // Swap meals pattern - match swap, switch, exchange, trade
+    if (text.includes('swap') || text.includes('switch') || text.includes('exchange') || text.includes('trade')) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'today', 'tomorrow'];
       const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
       
       let day1 = null, mealType1 = null, day2 = null, mealType2 = null;
       
+      // Find days in order of appearance in the text
       for (const day of days) {
-        if (text.includes(day)) {
-          if (!day1) day1 = day;
-          else if (!day2) day2 = day;
+        const idx = text.indexOf(day);
+        if (idx !== -1) {
+          if (day1 === null) {
+            day1 = day;
+          } else if (day2 === null && day !== day1) {
+            day2 = day;
+          }
         }
       }
+      
+      // Also check for "X and Y" pattern - e.g., "wednesday and thursday"
+      const andMatch = text.match(/(\w+day)\s+and\s+(\w+day)/i);
+      if (andMatch) {
+        const d1 = andMatch[1].toLowerCase();
+        const d2 = andMatch[2].toLowerCase();
+        if (days.includes(d1)) day1 = d1;
+        if (days.includes(d2)) day2 = d2;
+      }
+      
       for (const meal of mealTypes) {
         if (text.includes(meal)) {
           if (!mealType1) mealType1 = meal;
@@ -462,12 +517,24 @@ Now interpret the user input and respond with JSON only:`;
       // If only one meal type mentioned, use it for both
       if (mealType1 && !mealType2) mealType2 = mealType1;
       
+      // If two days but NO meal type specified, swap ALL meals between those days
+      if (day1 && day2 && !mealType1) {
+        return {
+          success: true,
+          intent: 'swap_all_meals',
+          entities: { day1, day2 },
+          confidence: 0.8,
+          response: `I'll swap all meals between ${day1} and ${day2}!`,
+          metadata: { method: 'fallback' }
+        };
+      }
+      
       if (day1 && day2 && mealType1 && mealType2) {
         return {
           success: true,
           intent: 'swap_meals',
           entities: { day1, mealType1, day2, mealType2 },
-          confidence: 0.7,
+          confidence: 0.8,
           response: `I'll swap ${day1} ${mealType1} with ${day2} ${mealType2}!`,
           metadata: { method: 'fallback' }
         };
@@ -555,6 +622,70 @@ Now interpret the user input and respond with JSON only:`;
       };
     }
 
+    // Mark all items as completed
+    if ((text.includes('mark') || text.includes('check')) && 
+        (text.includes('all') || text.includes('everything')) && 
+        (text.includes('complete') || text.includes('done') || text.includes('off'))) {
+      return {
+        success: true,
+        intent: 'mark_all_completed',
+        entities: {},
+        confidence: 0.8,
+        response: "I'll mark all items as completed!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Clear completed items from shopping list
+    if ((text.includes('clear') || text.includes('remove') || text.includes('delete')) && 
+        (text.includes('completed') || text.includes('checked') || text.includes('done')) &&
+        (text.includes('item') || text.includes('list'))) {
+      return {
+        success: true,
+        intent: 'clear_shopping_list',
+        entities: { checkedOnly: true },
+        confidence: 0.8,
+        response: "I'll clear the completed items from your list!",
+        metadata: { method: 'fallback' }
+      };
+    }
+
+    // Double/triple recipe ingredients in shopping list
+    if (text.includes('double') || text.includes('triple') || text.includes('quadruple') || 
+        text.match(/\b(2x|3x|4x)\b/i) || text.match(/\bmake\s+(?:that\s+)?(?:a\s+)?(?:double|triple)/i)) {
+      // Determine multiplier
+      let multiplier = 2;
+      if (text.includes('triple') || text.includes('3x')) multiplier = 3;
+      if (text.includes('quadruple') || text.includes('4x')) multiplier = 4;
+      
+      // Extract recipe name
+      let recipeName = '';
+      // Pattern: "double the spaghetti bolognese" or "double spaghetti bolognese"
+      const simpleMatch = text.match(/(?:double|triple|quadruple|2x|3x|4x)\s+(?:the\s+)?(?:recipe\s+)?(?:for\s+)?(.+?)(?:\s+(?:recipe|ingredients?))?$/i);
+      if (simpleMatch) {
+        recipeName = simpleMatch[1].trim();
+      }
+      // Pattern: "make that a double recipe for X" or "let's make that a double for X"
+      const makeMatch = text.match(/(?:make\s+(?:that\s+)?(?:a\s+)?(?:double|triple|quadruple))\s+(?:recipe\s+)?(?:for\s+)?(.+?)$/i);
+      if (makeMatch) {
+        recipeName = makeMatch[1].trim();
+      }
+      
+      // Clean up recipe name
+      recipeName = recipeName.replace(/\s+(?:recipe|ingredients?)$/i, '').trim();
+      
+      if (recipeName) {
+        return {
+          success: true,
+          intent: 'double_recipe',
+          entities: { recipeName, multiplier },
+          confidence: 0.8,
+          response: `I'll ${multiplier === 2 ? 'double' : multiplier === 3 ? 'triple' : 'quadruple'} the ${recipeName} ingredients!`,
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
     // Search recipes
     if ((text.includes('search') || text.includes('find')) && text.includes('recipe')) {
       const queryMatch = text.match(/(?:search|find)\s+(?:my\s+)?(?:recipes?\s+)?(?:for\s+)?(.+)/i);
@@ -565,6 +696,32 @@ Now interpret the user input and respond with JSON only:`;
           entities: { query: queryMatch[1].replace(/recipes?/gi, '').trim() },
           confidence: 0.7,
           response: "Let me search your recipes!",
+          metadata: { method: 'fallback' }
+        };
+      }
+    }
+
+    // Save recipe (from meal plan to recipes collection)
+    if (text.includes('save') && (text.includes('recipe') || text.includes('to recipes') || text.includes('to my recipes'))) {
+      // Match patterns like "save Breakfast Burritos to recipes" or "save the chicken stir fry"
+      let recipeName = '';
+      const toRecipesMatch = text.match(/save\s+(?:the\s+)?(.+?)\s+(?:to\s+(?:my\s+)?recipes?|recipe)/i);
+      if (toRecipesMatch) {
+        recipeName = toRecipesMatch[1].trim();
+      } else {
+        // Try "save [recipe name]"
+        const simpleMatch = text.match(/save\s+(?:the\s+)?(.+)/i);
+        if (simpleMatch) {
+          recipeName = simpleMatch[1].replace(/\s+(?:to\s+(?:my\s+)?recipes?|recipe).*$/i, '').trim();
+        }
+      }
+      if (recipeName) {
+        return {
+          success: true,
+          intent: 'save_recipe',
+          entities: { recipeName },
+          confidence: 0.8,
+          response: `I'll save "${recipeName}" to your recipes!`,
           metadata: { method: 'fallback' }
         };
       }

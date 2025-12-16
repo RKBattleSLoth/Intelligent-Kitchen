@@ -32,7 +32,22 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
 
   useEffect(() => {
     loadRecipes()
+    
+    // Listen for recipe updates
+    const handleRecipesUpdated = () => {
+      loadRecipes()
+    }
+    window.addEventListener('recipes-updated', handleRecipesUpdated)
+    return () => window.removeEventListener('recipes-updated', handleRecipesUpdated)
   }, [])
+
+  useEffect(() => {
+    const shouldOpenForm = sessionStorage.getItem('openRecipeForm')
+    if (shouldOpenForm === 'true') {
+      sessionStorage.removeItem('openRecipeForm')
+      onAdd()
+    }
+  }, [onAdd])
 
   useEffect(() => {
     filterRecipes()
@@ -194,7 +209,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
     }, [
       React.createElement('h2', {
         key: 'title',
-        style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9' }
+        style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1a1a1a', fontFamily: "'Playfair Display', Georgia, serif" }
       }, `Recipes (${filteredRecipes.length})`),
       React.createElement('div', {
         key: 'actions',
@@ -208,7 +223,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
           key: 'add-btn',
           onClick: onAdd,
           style: {
-            background: '#3b82f6',
+            background: '#0fc7b9',
             color: 'white',
             border: 'none',
             padding: '0.75rem 1.5rem',
@@ -222,7 +237,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
           onClick: handleImportFromUrl,
           disabled: isImporting,
           style: {
-            background: '#0d9488',
+            background: '#035b49',
             color: 'white',
             border: 'none',
             padding: '0.75rem 1.5rem',
@@ -255,11 +270,11 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
           flex: 1,
           minWidth: '200px',
           padding: '0.75rem',
-          border: '1px solid #4b5563',
+          border: '1px solid #d1d5db',
           borderRadius: '0.375rem',
           fontSize: '1rem',
-          background: '#1f2937',
-          color: '#f9fafb'
+          background: '#ffffff',
+          color: '#1a1a1a'
         }
       }),
       
@@ -269,11 +284,11 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
         onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCategory(e.target.value as RecipeCategory | 'All'),
         style: {
           padding: '0.75rem',
-          border: '1px solid #4b5563',
+          border: '1px solid #d1d5db',
           borderRadius: '0.375rem',
           fontSize: '1rem',
-          background: '#1f2937',
-          color: '#f9fafb'
+          background: '#ffffff',
+          color: '#1a1a1a'
         }
       }, ['All', ...CATEGORIES].map(category => 
         React.createElement('option', { key: category, value: category }, category)
@@ -297,14 +312,14 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
               gridColumn: '1 / -1',
               textAlign: 'center',
               padding: '3rem',
-              background: '#1e293b',
+              background: '#ffffff',
               borderRadius: '0.5rem',
-              border: '1px solid #334155'
+              border: '1px solid #e5e7eb'
             }
           }, [
             React.createElement('div', { key: 'icon', style: { fontSize: '3rem', marginBottom: '1rem' } }, '📖'),
-            React.createElement('h3', { key: 'empty-title', style: { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#f1f5f9' } }, 'No recipes found'),
-            React.createElement('p', { key: 'empty-desc', style: { color: '#94a3b8', marginBottom: '1rem' } }, 
+            React.createElement('h3', { key: 'empty-title', style: { fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#1a1a1a' } }, 'No recipes found'),
+            React.createElement('p', { key: 'empty-desc', style: { color: '#4b5563', marginBottom: '1rem' } }, 
               searchTerm || selectedCategory !== 'All' 
                 ? 'Try adjusting your search or filters'
                 : 'Start by adding your first recipe'
@@ -327,10 +342,10 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
             React.createElement('div', {
               key: recipe.id,
               style: {
-                background: '#1e293b',
+                background: '#ffffff',
                 borderRadius: '0.5rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                border: '1px solid #334155',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                border: '1px solid #e5e7eb',
                 overflow: 'hidden',
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 display: 'flex',
@@ -343,7 +358,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 key: 'recipe-header',
                 style: {
                   padding: '1rem',
-                  borderBottom: '1px solid #334155',
+                  borderBottom: '1px solid #e5e7eb',
                   flexShrink: 0
                 }
               }, [
@@ -396,7 +411,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 React.createElement('p', {
                   key: 'preview-text',
                   style: {
-                    color: '#94a3b8',
+                    color: '#4b5563',
                     fontSize: '0.875rem',
                     lineHeight: '1.5',
                     display: '-webkit-box',
@@ -412,7 +427,7 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                 key: 'actions',
                 style: {
                   padding: '1rem',
-                  borderTop: '1px solid #334155',
+                  borderTop: '1px solid #e5e7eb',
                   display: 'flex',
                   gap: '0.5rem',
                   justifyContent: 'flex-end',
@@ -424,9 +439,9 @@ export function RecipeList({ onEdit, onAdd }: RecipeListProps) {
                   onClick: () => onEdit(recipe),
                   style: {
                     padding: '0.5rem 1rem',
-                    background: '#374151',
-                    color: '#f1f5f9',
-                    border: '1px solid #4b5563',
+                    background: '#f3f4f6',
+                    color: '#1a1a1a',
+                    border: '1px solid #d1d5db',
                     borderRadius: '0.375rem',
                     fontSize: '0.875rem',
                     cursor: 'pointer'
