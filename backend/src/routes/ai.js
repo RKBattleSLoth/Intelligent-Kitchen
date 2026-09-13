@@ -92,6 +92,13 @@ router.post('/extract-recipe-from-url', [
     });
   } catch (error) {
     console.error('Recipe URL extraction error:', error);
+    if (error.blockedBySite) {
+      return res.status(502).json({
+        success: false,
+        error: 'This site blocks automated recipe importers. Try pasting the recipe text instead.',
+        upstreamStatus: error.upstreamStatus
+      });
+    }
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to extract recipe from URL'
