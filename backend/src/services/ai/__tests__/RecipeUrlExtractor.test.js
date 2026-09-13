@@ -53,3 +53,48 @@ describe('RecipeUrlExtractor helpers', () => {
     expect(extractor.deriveTitleFromUrl('invalid')).toBe('Imported Recipe');
   });
 });
+
+describe('fetchHtml bot-blocking fallback', () => {
+  const makeExtractor = () => new RecipeUrlExtractor({
+    requestRouter: { route: jest.fn() },
+    recipeAgent: { extractIngredients: jest.fn() }
+  });
+
+  afterEach(() => {
+    delete global.fetch;
+  });
+
+  test('falls back to the reader proxy on 403 and returns its HTML', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 403, headers: { get: () => 'text/html' } })
+      .mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => '<html>recipe</html>' });
+
+    await expect(makeExtractor().fetchHtml('https://example.com/r')).resolves.toBe('<html>recipe</html>');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[1][0]).toBe('https://r.jina.ai/https://example.com/r');
+    expect(global.fetch.mock.calls[1][1].headers['X-Return-Format']).toBe('html');
+  });
+
+  test('surfaces the original blocked status when the reader also fails', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 403, headers: { get: () => 'text/html' } })
+      .mockResolvedValueOnce({ ok: false, status: 451, headers: { get: () => 'text/html' } });
+
+    await expect(makeExtractor().fetchHtml('https://example.com/r')).rejects.toMatchObject({
+      message: 'Failed to fetch URL: 403',
+      blockedBySite: true,
+      upstreamStatus: 403
+    });
+  });
+
+  test('does not use the reader for ordinary failures', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, headers: { get: () => 'text/html' } });
+
+    await expect(makeExtractor().fetchHtml('https://example.com/r')).rejects.toMatchObject({
+      message: 'Failed to fetch URL: 500',
+      blockedBySite: false
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});

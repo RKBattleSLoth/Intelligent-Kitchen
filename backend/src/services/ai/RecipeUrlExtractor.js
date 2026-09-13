@@ -13,6 +13,7 @@ class RecipeUrlExtractor {
     this.modelName = options.modelName || process.env.OPENROUTER_RECIPE_URL_MODEL || 'anthropic/claude-3-5-haiku';
     this.parserConfidenceThreshold = options.parserConfidenceThreshold ?? 0.5;
     this.multiAgentThreshold = options.multiAgentThreshold ?? 0.35;
+    this.readerBaseUrl = options.readerBaseUrl || process.env.RECIPE_READER_BASE_URL || 'https://r.jina.ai/';
   }
 
   async extract(url, { userId = 'url-importer' } = {}) {
@@ -255,8 +256,13 @@ class RecipeUrlExtractor {
       }
     });
 
+    if (RecipeUrlExtractor.FALLBACK_STATUSES.includes(response.status)) {
+      console.warn(`RecipeUrlExtractor: direct fetch blocked with ${response.status}, retrying via reader proxy`);
+      return await this.fetchHtmlViaReader(url, response.status);
+    }
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.status}`);
+      throw RecipeUrlExtractor.fetchError(response.status);
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -265,6 +271,42 @@ class RecipeUrlExtractor {
     }
 
     return await response.text();
+  }
+
+  // Bot protection (Cloudflare, DataDome, etc.) rejects datacenter IPs and
+  // non-browser TLS fingerprints outright, so no header change can fix a
+  // 402/403 from the direct fetch. Jina Reader fetches the page with a real
+  // browser; X-Return-Format html keeps the JSON-LD pipeline intact.
+  async fetchHtmlViaReader(url, blockedStatus) {
+    const headers = {
+      'X-Return-Format': 'html',
+      Accept: 'text/html,application/xhtml+xml,text/plain'
+    };
+    if (process.env.JINA_API_KEY) {
+      headers.Authorization = `Bearer ${process.env.JINA_API_KEY}`;
+    }
+
+    let response;
+    try {
+      response = await fetch(`${this.readerBaseUrl}${url}`, { headers });
+    } catch (error) {
+      console.warn('RecipeUrlExtractor: reader proxy request failed', error.message);
+      throw RecipeUrlExtractor.fetchError(blockedStatus);
+    }
+
+    if (!response.ok) {
+      console.warn(`RecipeUrlExtractor: reader proxy returned ${response.status} for ${url}`);
+      throw RecipeUrlExtractor.fetchError(blockedStatus);
+    }
+
+    return await response.text();
+  }
+
+  static fetchError(status) {
+    const error = new Error(`Failed to fetch URL: ${status}`);
+    error.upstreamStatus = status;
+    error.blockedBySite = RecipeUrlExtractor.BLOCKED_STATUSES.includes(status);
+    return error;
   }
 
   sanitizeHtml(html) {
@@ -471,5 +513,10 @@ ${clipped}`;
     return lines.join('\n').trim();
   }
 }
+
+// Statuses worth retrying through the reader: real bot blocks plus the soft
+// 404s some sites (e.g. Food Network) serve to non-browser clients.
+RecipeUrlExtractor.FALLBACK_STATUSES = [401, 402, 403, 404, 429];
+RecipeUrlExtractor.BLOCKED_STATUSES = [401, 402, 403, 429];
 
 module.exports = RecipeUrlExtractor;
