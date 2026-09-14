@@ -27,6 +27,16 @@ async function runMigrations() {
     // object exists, so column additions for live databases must be idempotent here.
     await query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS skylight_id BIGINT');
     await query('CREATE UNIQUE INDEX IF NOT EXISTS recipes_skylight_id_key ON recipes (skylight_id)');
+
+    // The recipe endpoints write with a hardcoded MVP user ID. Local test runs
+    // seed that user, but a fresh production database never did, so every
+    // recipe insert failed on recipes_user_id_fkey. Seed it idempotently.
+    await query(
+      `INSERT INTO users (id, email, password_hash, first_name, last_name)
+       VALUES ('2d4969fe-fedb-4c37-89e2-75eaf6ad61a3', 'mvp-owner@intelligent-kitchen.local',
+               '$2b$10$CwTycUXWue0Thq9StjUM0uJ8K3uGNJ4G/2Fne5DE5F.hyp7fZC.W.', 'Kitchen', 'Owner')
+       ON CONFLICT (id) DO NOTHING`
+    );
   } catch (error) {
     console.error('Error running migrations:', error);
     process.exit(1);
