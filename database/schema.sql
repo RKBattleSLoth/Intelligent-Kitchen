@@ -53,6 +53,7 @@ CREATE TABLE recipes (
     servings INTEGER NOT NULL DEFAULT 4,
     difficulty VARCHAR(50) DEFAULT 'medium',
     meal_type meal_type,
+    skylight_id BIGINT UNIQUE, -- recipe ID on the Skylight frame, set when pushed/imported
     is_public BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

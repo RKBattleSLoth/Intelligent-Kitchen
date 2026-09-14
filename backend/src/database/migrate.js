@@ -22,6 +22,11 @@ async function runMigrations() {
         throw error;
       }
     }
+
+    // Incremental migrations: the schema block above is skipped entirely once any
+    // object exists, so column additions for live databases must be idempotent here.
+    await query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS skylight_id BIGINT');
+    await query('CREATE UNIQUE INDEX IF NOT EXISTS recipes_skylight_id_key ON recipes (skylight_id)');
   } catch (error) {
     console.error('Error running migrations:', error);
     process.exit(1);

@@ -13,7 +13,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const offset = (page - 1) * limit;
     
     let sql = `
-      SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.is_public, r.created_at,
+      SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at,
              u.first_name || ' ' || u.last_name as author_name,
              n.calories, n.protein, n.carbohydrates, n.fat
       FROM recipes r
@@ -115,7 +115,7 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const recipeResult = await query(
-      `SELECT r.id, r.name, r.description, r.instructions, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.is_public, r.created_at,
+      `SELECT r.id, r.name, r.description, r.instructions, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at,
               u.first_name || ' ' || u.last_name as author_name,
               n.calories, n.protein, n.carbohydrates, n.fat, n.fiber, n.sugar, n.sodium
        FROM recipes r
@@ -155,10 +155,11 @@ router.post('/', [
   body('servings').isInt({ min: 1 }),
   body('mealType').optional().isIn(['breakfast', 'lunch', 'dinner', 'snack', 'dessert']),
   body('difficulty').optional().isIn(['easy', 'medium', 'hard']),
+  body('skylightId').optional().isInt(),
   handleValidationErrors
 ], async (req, res) => {
   try {
-    const { name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, ingredients, nutrition } = req.body;
+    const { name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, skylightId, ingredients, nutrition } = req.body;
 
     const client = await pool.connect();
 
@@ -167,10 +168,10 @@ router.post('/', [
 
       // Create recipe with hardcoded user ID for MVP testing
       const recipeResult = await client.query(
-        `INSERT INTO recipes (user_id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
-         RETURNING id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public, created_at`,
-        ['2d4969fe-fedb-4c37-89e2-75eaf6ad61a3', name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic || false]
+        `INSERT INTO recipes (user_id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public, skylight_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+         RETURNING id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public, skylight_id, created_at`,
+        ['2d4969fe-fedb-4c37-89e2-75eaf6ad61a3', name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic || false, skylightId ?? null]
       );
 
       const recipe = recipeResult.rows[0];
@@ -227,7 +228,9 @@ router.post('/', [
     }
   } catch (error) {
     console.error('Create recipe error:', error);
-    if (error.code === '22P02') {
+    if (error.code === '23505') {
+      res.status(409).json({ error: 'A recipe with that skylightId already exists' });
+    } else if (error.code === '22P02') {
       // Invalid enum value error
       res.status(400).json({ error: 'Invalid unit of measure. Please use valid units like: pieces, cups, tablespoons, teaspoons, grams, kilograms, ounces, pounds, milliliters, liters' });
     } else if (error.code === '23514') {
@@ -246,10 +249,11 @@ router.put('/:id', [ // Temporarily disable authentication for MVP testing
   body('servings').optional().isInt({ min: 1 }),
   body('mealType').optional().isIn(['breakfast', 'lunch', 'dinner', 'snack', 'dessert']),
   body('difficulty').optional().isIn(['easy', 'medium', 'hard']),
+  body('skylightId').optional().isInt(),
   handleValidationErrors
 ], async (req, res) => {
   try {
-    const { name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, ingredients, nutrition } = req.body;
+    const { name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, skylightId, ingredients, nutrition } = req.body;
 
     // MVP: Use hardcoded user ID instead of authentication
     const userId = '2d4969fe-fedb-4c37-89e2-75eaf6ad61a3';
@@ -279,10 +283,11 @@ router.put('/:id', [ // Temporarily disable authentication for MVP testing
              meal_type = COALESCE($7, meal_type), 
              difficulty = COALESCE($8, difficulty), 
              is_public = COALESCE($9, is_public),
+             skylight_id = COALESCE($10, skylight_id),
              updated_at = CURRENT_TIMESTAMP 
-          WHERE id = $10 AND user_id = $11 
-          RETURNING id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public, created_at`,
-        [name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, req.params.id, userId]
+          WHERE id = $11 AND user_id = $12 
+          RETURNING id, name, description, instructions, prep_time, cook_time, servings, meal_type, difficulty, is_public, skylight_id, created_at`,
+        [name, description, instructions, prepTime, cookTime, servings, mealType, difficulty, isPublic, skylightId ?? null, req.params.id, userId]
       );
 
       // Update ingredients if provided
@@ -377,7 +382,7 @@ router.get('/user/my-recipes', async (req, res) => { // Temporarily disable auth
     const offset = (page - 1) * limit;
 
     const result = await query(
-      `SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.is_public, r.created_at,
+      `SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at,
               n.calories, n.protein, n.carbohydrates, n.fat
        FROM recipes r
        LEFT JOIN nutrition_info n ON r.id = n.recipe_id
