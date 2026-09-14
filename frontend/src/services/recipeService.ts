@@ -1,77 +1,97 @@
 import { Recipe, RecipeFormData, RecipeCategory } from '../types/recipe'
 import { aiService } from './aiService'
 import { parseIngredientsFromInstructions, IngredientParseResult } from '../utils/ingredientParser'
+import api from './api'
 
-const STORAGE_KEY = 'intelligent-kitchen-recipes'
+// Recipes live in the shared backend database so every browser (and the
+// Skylight push tooling) sees the same book. localStorage is no longer used.
+
+const CATEGORY_TO_MEAL_TYPE: Record<string, string> = {
+  Breakfast: 'breakfast',
+  Lunch: 'lunch',
+  Dinner: 'dinner',
+  Snack: 'snack',
+  Dessert: 'dessert'
+  // 'Beverage' has no backend meal_type; it is sent as null
+}
+
+const MEAL_TYPE_TO_CATEGORY: Record<string, RecipeCategory> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+  dessert: 'Dessert'
+}
 
 class RecipeService {
-  private getRecipes(): Recipe[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      return stored ? JSON.parse(stored) : this.getDefaultRecipes()
-    } catch {
-      return this.getDefaultRecipes()
+  private mapFromServer(row: any): Recipe {
+    return {
+      id: row.id,
+      name: row.name,
+      category: MEAL_TYPE_TO_CATEGORY[row.meal_type] || 'Dinner',
+      instructions: row.instructions || '',
+      description: row.description || undefined,
+      prepTime: row.prep_time ?? undefined,
+      cookTime: row.cook_time ?? undefined,
+      servings: row.servings ?? undefined,
+      difficulty: row.difficulty ?? undefined,
+      mealType: row.meal_type ?? undefined,
+      isPublic: row.is_public ?? undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || row.created_at || new Date().toISOString()
     }
   }
 
-  private saveRecipes(recipes: Recipe[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes))
-  }
-
-  private getDefaultRecipes(): Recipe[] {
-    return [
-      {
-        id: '1',
-        name: 'Classic Spaghetti Carbonara',
-        category: 'Dinner',
-        instructions: 'Ingredients: 400g spaghetti, 200g pancetta, 4 eggs, 100g Parmesan cheese, black pepper, salt\n\nInstructions: 1. Cook spaghetti according to package directions. 2. While pasta cooks, crisp pancetta in a large pan. 3. Beat eggs with Parmesan and pepper. 4. Drain pasta, reserve 1 cup pasta water. 5. Mix hot pasta with pancetta, then egg mixture off heat. 6. Add pasta water to achieve creamy consistency. 7. Serve immediately with extra Parmesan.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: '2',
-        name: 'Avocado Toast',
-        category: 'Breakfast',
-        instructions: 'Ingredients: 2 slices bread, 1 ripe avocado, lemon juice, salt, pepper, red pepper flakes, optional egg\n\nInstructions: 1. Toast bread until golden. 2. Mash avocado with lemon juice, salt, and pepper. 3. Spread avocado on toast. 4. Sprinkle with red pepper flakes. 5. Top with fried or poached egg if desired.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: '3',
-        name: 'Greek Salad',
-        category: 'Lunch',
-        instructions: 'Ingredients: 2 cucumbers, 4 tomatoes, 1 red onion, 200g feta cheese, olives, olive oil, oregano, salt, pepper\n\nInstructions: 1. Chop cucumbers and tomatoes. 2. Slice red onion thinly. 3. Combine vegetables in a bowl. 4. Add crumbled feta and olives. 5. Drizzle with olive oil and sprinkle with oregano. 6. Season with salt and pepper. 7. Toss well and serve.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ]
+  private mapToServer(data: Partial<RecipeFormData>): any {
+    const body: any = {}
+    if (data.name !== undefined) body.name = data.name
+    if (data.description !== undefined) body.description = data.description
+    if (data.instructions !== undefined) body.instructions = data.instructions
+    if (data.prepTime !== undefined) body.prepTime = data.prepTime
+    if (data.cookTime !== undefined) body.cookTime = data.cookTime
+    if (data.category !== undefined) {
+      const mealType = CATEGORY_TO_MEAL_TYPE[data.category]
+      if (mealType) body.mealType = mealType
+    }
+    return body
   }
 
   async getAllRecipes(): Promise<Recipe[]> {
-    return this.getRecipes()
+    const pageSize = 100
+    let page = 1
+    const all: Recipe[] = []
+    for (;;) {
+      const response = await api.get('/recipes', { params: { page, limit: pageSize } })
+      const rows = response.data.recipes || []
+      all.push(...rows.map((row: any) => this.mapFromServer(row)))
+      const total = response.data.pagination?.total ?? all.length
+      if (all.length >= total || rows.length === 0) break
+      page++
+    }
+    return all
   }
 
   async getRecipeById(id: string): Promise<Recipe | null> {
-    const recipes = this.getRecipes()
-    return recipes.find(recipe => recipe.id === id) || null
+    try {
+      const response = await api.get(`/recipes/${id}`)
+      return this.mapFromServer(response.data)
+    } catch (error: any) {
+      if (error?.response?.status === 404) return null
+      throw error
+    }
   }
 
   async getRecipesByCategory(category: RecipeCategory): Promise<Recipe[]> {
-    const recipes = this.getRecipes()
+    const recipes = await this.getAllRecipes()
     return recipes.filter(recipe => recipe.category === category)
   }
 
   async createRecipe(data: RecipeFormData): Promise<Recipe> {
-    const recipes = this.getRecipes()
-    const newRecipe: Recipe = {
-      id: Date.now().toString(),
-      ...data,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-    recipes.push(newRecipe)
-    this.saveRecipes(recipes)
-    return newRecipe
+    const body = this.mapToServer(data)
+    body.servings = data.servings || 4
+    body.isPublic = true
+    const response = await api.post('/recipes', body)
+    return this.mapFromServer(response.data.recipe)
   }
 
   async importRecipeFromUrl(url: string, category: RecipeCategory = 'Dinner'): Promise<Recipe> {
@@ -90,44 +110,31 @@ class RecipeService {
       ? recipe.instructionsText.trim()
       : RecipeService.composeInstructions(recipe.ingredients || [], recipe.directions || [])
 
-    const now = new Date().toISOString()
-    const newRecipe: Recipe = {
-      id: Date.now().toString(),
+    return this.createRecipe({
       name: recipe.title || 'Imported Recipe',
       category,
-      instructions: recipe.sourceUrl ? `${instructions}\n\nSource: ${recipe.sourceUrl}` : instructions,
-      createdAt: now,
-      updatedAt: now
-    }
-
-    const recipes = this.getRecipes()
-    recipes.push(newRecipe)
-    this.saveRecipes(recipes)
-
-    return newRecipe
+      instructions: recipe.sourceUrl ? `${instructions}\n\nSource: ${recipe.sourceUrl}` : instructions
+    })
   }
 
   async updateRecipe(id: string, data: Partial<RecipeFormData>): Promise<Recipe | null> {
-    const recipes = this.getRecipes()
-    const index = recipes.findIndex(recipe => recipe.id === id)
-    if (index === -1) return null
-
-    recipes[index] = {
-      ...recipes[index],
-      ...data,
-      updatedAt: new Date().toISOString()
+    try {
+      const response = await api.put(`/recipes/${id}`, this.mapToServer(data))
+      return this.mapFromServer(response.data.recipe)
+    } catch (error: any) {
+      if (error?.response?.status === 404) return null
+      throw error
     }
-    this.saveRecipes(recipes)
-    return recipes[index]
   }
 
   async deleteRecipe(id: string): Promise<boolean> {
-    const recipes = this.getRecipes()
-    const filteredRecipes = recipes.filter(recipe => recipe.id !== id)
-    if (filteredRecipes.length === recipes.length) return false
-    
-    this.saveRecipes(filteredRecipes)
-    return true
+    try {
+      await api.delete(`/recipes/${id}`)
+      return true
+    } catch (error: any) {
+      if (error?.response?.status === 404) return false
+      throw error
+    }
   }
 
   // Extract ingredients from instructions text using AI
