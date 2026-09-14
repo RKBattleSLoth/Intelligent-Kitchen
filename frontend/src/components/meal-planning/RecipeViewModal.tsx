@@ -189,8 +189,8 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
       key: 'modal',
       onClick: (e: React.MouseEvent) => e.stopPropagation(),
       style: {
-        background: '#ffffff',
-        border: '1px solid #e5e7eb',
+        background: '#1e293b',
+        border: '1px solid #334155',
         borderRadius: '0.5rem',
         padding: '2rem',
         maxWidth: '800px',
@@ -263,7 +263,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
         React.createElement('div', { key: 'title-section' }, [
           React.createElement('h2', {
             key: 'title',
-            style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '0.5rem', fontFamily: "'Playfair Display', Georgia, serif" }
+            style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#f1f5f9', marginBottom: '0.5rem' }
           }, currentRecipe.name),
           React.createElement('div', {
             key: 'meta',
@@ -282,7 +282,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
             }, isAIGenerated ? '🤖 AI Generated' : '📖 Saved Recipe'),
             React.createElement('span', {
               key: 'timing',
-              style: { color: '#4b5563', fontSize: '0.875rem' }
+              style: { color: '#94a3b8', fontSize: '0.875rem' }
             }, `⏱️ ${currentRecipe.prepTime || 30} min prep • ${currentRecipe.cookTime || 30} min cook`)
           ])
         ]),
@@ -294,7 +294,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
             border: 'none',
             fontSize: '1.5rem',
             cursor: 'pointer',
-            color: '#4b5563',
+            color: '#94a3b8',
             padding: '0.25rem'
           }
         }, '×')
@@ -310,7 +310,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           }, [
             React.createElement('label', {
               key: 'label',
-              style: { display: 'block', marginBottom: '0.5rem', color: '#1a1a1a', fontWeight: 'bold' }
+              style: { display: 'block', marginBottom: '0.5rem', color: '#f1f5f9', fontWeight: 'bold' }
             }, 'Recipe Name:'),
             React.createElement('input', {
               key: 'input',
@@ -321,10 +321,10 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               style: {
                 width: '100%',
                 padding: '0.75rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #4b5563',
                 borderRadius: '0.375rem',
-                background: '#ffffff',
-                color: '#1a1a1a'
+                background: '#0f172a',
+                color: '#f1f5f9'
               }
             })
           ]),
@@ -334,7 +334,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           }, [
             React.createElement('label', {
               key: 'label',
-              style: { display: 'block', marginBottom: '0.5rem', color: '#1a1a1a', fontWeight: 'bold' }
+              style: { display: 'block', marginBottom: '0.5rem', color: '#f1f5f9', fontWeight: 'bold' }
             }, 'Instructions:'),
             React.createElement('textarea', {
               key: 'textarea',
@@ -345,10 +345,10 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               style: {
                 width: '100%',
                 padding: '0.75rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #4b5563',
                 borderRadius: '0.375rem',
-                background: '#ffffff',
-                color: '#1a1a1a',
+                background: '#0f172a',
+                color: '#f1f5f9',
                 resize: 'vertical'
               }
             })
@@ -359,7 +359,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           }, [
             React.createElement('label', {
               key: 'label',
-              style: { display: 'block', marginBottom: '0.5rem', color: '#1a1a1a', fontWeight: 'bold' }
+              style: { display: 'block', marginBottom: '0.5rem', color: '#f1f5f9', fontWeight: 'bold' }
             }, 'Ingredients (one per line):'),
             React.createElement('textarea', {
               key: 'textarea',
@@ -374,10 +374,10 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               style: {
                 width: '100%',
                 padding: '0.75rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #4b5563',
                 borderRadius: '0.375rem',
-                background: '#ffffff',
-                color: '#1a1a1a',
+                background: '#0f172a',
+                color: '#f1f5f9',
                 resize: 'vertical'
               }
             })
@@ -393,7 +393,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           }, [
             React.createElement('h3', {
               key: 'title',
-              style: { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1a1a1a' }
+              style: { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
             }, '🥘 Ingredients'),
             React.createElement('ul', {
               key: 'list',
@@ -407,8 +407,8 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
                     key: index,
                     style: {
                       padding: '0.5rem 0',
-                      borderBottom: '1px solid #e5e7eb',
-                      color: '#1a1a1a'
+                      borderBottom: '1px solid #334155',
+                      color: '#e2e8f0'
                     }
                   }, `• ${ingredient}`)
                 )
@@ -422,13 +422,13 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           }, [
             React.createElement('h3', {
               key: 'title',
-              style: { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem', color: '#1a1a1a' }
+              style: { fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem', color: '#f1f5f9' }
             }, '📝 Instructions'),
             React.createElement('div', {
               key: 'content',
               style: {
                 lineHeight: '1.6',
-                color: '#1a1a1a',
+                color: '#e2e8f0',
                 whiteSpace: 'pre-wrap'
               }
             }, currentRecipe.instructions || 'No instructions provided')
@@ -445,7 +445,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           gap: '0.75rem',
           marginTop: '1.5rem',
           paddingTop: '1.5rem',
-          borderTop: '1px solid #e5e7eb'
+          borderTop: '1px solid #334155'
         }
       }, [
         onAddToShoppingList && React.createElement('button', {
@@ -521,7 +521,7 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
           alignItems: 'center',
           marginTop: '2rem',
           paddingTop: '1.5rem',
-          borderTop: '1px solid #e5e7eb'
+          borderTop: '1px solid #334155'
         }
       }, [
         React.createElement('div', { key: 'right-buttons' }, [
@@ -531,9 +531,9 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               onClick: handleCancelEdit,
               style: {
                 padding: '0.75rem 1.5rem',
-                background: '#f3f4f6',
-                color: '#1a1a1a',
-                border: '1px solid #d1d5db',
+                background: '#374151',
+                color: '#f1f5f9',
+                border: '1px solid #4b5563',
                 borderRadius: '0.375rem',
                 cursor: 'pointer',
                 marginRight: '0.75rem'
@@ -544,9 +544,9 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
               onClick: handleSaveEdit,
               style: {
                 padding: '0.75rem 1.5rem',
-                background: '#0fc7b9',
+                background: '#3b82f6',
                 color: 'white',
-                border: '1px solid #0ea5a0',
+                border: '1px solid #2563eb',
                 borderRadius: '0.375rem',
                 cursor: 'pointer',
                 fontWeight: 'bold'
@@ -561,9 +561,9 @@ export const RecipeViewModal: React.FC<RecipeViewModalProps> = ({
                 onClick: onReplaceMeal,
                 style: {
                   padding: '0.75rem 1.5rem',
-                  background: '#f3f4f6',
-                  color: '#1a1a1a',
-                  border: '1px solid #d1d5db',
+                  background: '#374151',
+                  color: '#f1f5f9',
+                  border: '1px solid #4b5563',
                   borderRadius: '0.375rem',
                   cursor: 'pointer',
                   marginRight: onSaveRecipe ? '0.75rem' : '0rem'

@@ -26,21 +26,11 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
         category: recipe.category,
         instructions: recipe.instructions
       })
-    } else {
-      const storedName = sessionStorage.getItem('newRecipeName')
-      if (storedName) {
-        sessionStorage.removeItem('newRecipeName')
-        setFormData(prev => ({
-          ...prev,
-          name: storedName,
-          category: defaultCategory || 'Dinner'
-        }))
-      } else if (defaultCategory) {
-        setFormData(prev => ({
-          ...prev,
-          category: defaultCategory
-        }))
-      }
+    } else if (defaultCategory) {
+      setFormData(prev => ({
+        ...prev,
+        category: defaultCategory
+      }))
     }
   }, [recipe, defaultCategory])
 
@@ -76,17 +66,17 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
   return React.createElement('form', {
     onSubmit: handleSubmit,
     style: {
-      background: '#ffffff',
+      background: '#1e293b',
       padding: '2rem',
       borderRadius: '0.5rem',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      border: '1px solid #e5e7eb',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+      border: '1px solid #334155',
       maxWidth: '600px'
     }
   }, [
     React.createElement('h2', {
       key: 'title',
-      style: { fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#1a1a1a', fontFamily: "'Playfair Display', Georgia, serif" }
+      style: { fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#f1f5f9' }
     }, recipe ? 'Edit Recipe' : 'Add New Recipe'),
 
     // Name field
@@ -101,7 +91,7 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
            display: 'block',
            fontSize: '0.875rem',
            fontWeight: '500',
-           color: '#1a1a1a',
+           color: '#f1f5f9',
            marginBottom: '0.5rem'
          }
        }, 'Recipe Name *'),
@@ -117,11 +107,11 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
          style: {
            width: '100%',
            padding: '0.75rem',
-           border: '1px solid #d1d5db',
+           border: '1px solid #4b5563',
            borderRadius: '0.375rem',
            fontSize: '1rem',
-           background: '#ffffff',
-           color: '#1a1a1a'
+           background: '#0f172a',
+           color: '#f9fafb'
          }
        })
     ]),
@@ -138,7 +128,7 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
            display: 'block',
            fontSize: '0.875rem',
            fontWeight: '500',
-           color: '#1a1a1a',
+           color: '#f1f5f9',
            marginBottom: '0.5rem'
          }
        }, 'Category *'),
@@ -152,11 +142,11 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
          style: {
            width: '100%',
            padding: '0.75rem',
-           border: '1px solid #d1d5db',
+           border: '1px solid #4b5563',
            borderRadius: '0.375rem',
            fontSize: '1rem',
-           background: '#ffffff',
-           color: '#1a1a1a'
+           background: '#0f172a',
+           color: '#f9fafb'
          }
        }, CATEGORIES.map(category => 
          React.createElement('option', {
@@ -178,7 +168,7 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
            display: 'block',
            fontSize: '0.875rem',
            fontWeight: '500',
-           color: '#1a1a1a',
+           color: '#f1f5f9',
            marginBottom: '0.5rem'
          }
        }, 'Ingredients & Instructions *'),
@@ -194,13 +184,13 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
          style: {
            width: '100%',
            padding: '0.75rem',
-           border: '1px solid #d1d5db',
+           border: '1px solid #4b5563',
            borderRadius: '0.375rem',
            fontSize: '1rem',
            fontFamily: 'inherit',
            resize: 'vertical',
-           background: '#ffffff',
-           color: '#1a1a1a'
+           background: '#0f172a',
+           color: '#f9fafb'
          }
        })
     ]),
@@ -221,13 +211,13 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
          disabled: isSubmitting,
          style: {
            padding: '0.75rem 1.5rem',
-           border: '1px solid #d1d5db',
+           border: '1px solid #4b5563',
            borderRadius: '0.375rem',
            fontSize: '1rem',
            cursor: isSubmitting ? 'not-allowed' : 'pointer',
            opacity: isSubmitting ? 0.5 : 1,
-           background: '#f3f4f6',
-           color: '#1a1a1a'
+           background: '#374151',
+           color: '#f1f5f9'
          }
        }, 'Cancel'),
       React.createElement('button', {
@@ -236,7 +226,7 @@ export function RecipeForm({ recipe, onSave, onCancel, defaultCategory }: Recipe
         disabled: isSubmitting,
         style: {
           padding: '0.75rem 1.5rem',
-          background: '#0fc7b9',
+          background: '#3b82f6',
           color: 'white',
           border: 'none',
           borderRadius: '0.375rem',
