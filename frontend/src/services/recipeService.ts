@@ -71,10 +71,6 @@ class RecipeService {
     }
     recipes.push(newRecipe)
     this.saveRecipes(recipes)
-    
-    // Dispatch event to notify listeners
-    window.dispatchEvent(new Event('recipes-updated'))
-    
     return newRecipe
   }
 
@@ -107,9 +103,6 @@ class RecipeService {
     const recipes = this.getRecipes()
     recipes.push(newRecipe)
     this.saveRecipes(recipes)
-    
-    // Dispatch event to notify listeners
-    window.dispatchEvent(new Event('recipes-updated'))
 
     return newRecipe
   }
@@ -125,10 +118,6 @@ class RecipeService {
       updatedAt: new Date().toISOString()
     }
     this.saveRecipes(recipes)
-    
-    // Dispatch event to notify listeners
-    window.dispatchEvent(new Event('recipes-updated'))
-    
     return recipes[index]
   }
 
@@ -138,10 +127,6 @@ class RecipeService {
     if (filteredRecipes.length === recipes.length) return false
     
     this.saveRecipes(filteredRecipes)
-    
-    // Dispatch event to notify listeners
-    window.dispatchEvent(new Event('recipes-updated'))
-    
     return true
   }
 

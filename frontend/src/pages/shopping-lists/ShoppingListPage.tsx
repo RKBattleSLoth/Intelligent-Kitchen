@@ -49,14 +49,9 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     checkAIStatus();
     loadTemplates();
 
-    // Subscribe to shopping list changes (for Betsy updates)
-    // Subscribe to both services since they're separate instances
+    // Subscribe to shopping list changes
     const unsubShoppingList = shoppingListService.subscribe(() => {
-      console.log('[ShoppingListPage] Shopping list changed (base), reloading...');
-      loadShoppingList();
-    });
-    const unsubEnhancedShoppingList = enhancedShoppingListService.subscribe(() => {
-      console.log('[ShoppingListPage] Shopping list changed (enhanced), reloading...');
+      console.log('[ShoppingListPage] Shopping list changed, reloading...');
       loadShoppingList();
     });
 
@@ -79,7 +74,6 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
 
     return () => {
       unsubShoppingList();
-      unsubEnhancedShoppingList();
       unsubCommand();
       unsubResult();
       unsubError();
@@ -474,7 +468,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
       case 'consolidate_shopping_list': {
         try {
           const consolidated = await enhancedShoppingListService.consolidateItems();
-          setItems(consolidated.items);
+          setItems(consolidated);
         } catch (err) {
           console.error('Consolidation failed:', err);
           setError('Failed to consolidate shopping list');
@@ -509,7 +503,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '50vh',
-        color: '#1a1a1a'
+        color: '#f1f5f9'
       }
     }, 'Loading shopping list...');
   }
@@ -536,7 +530,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           style: { 
             fontSize: isMobile ? '1.5rem' : '2rem', 
             fontWeight: 'bold', 
-            color: '#1a1a1a',
+            color: '#f1f5f9',
             margin: 0
           }
         }, '🛒 Shopping List'),
@@ -575,7 +569,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           disabled: !aiEnabled,
           title: aiEnabled ? 'Add ingredients from your recipes' : 'AI is currently unavailable',
           style: {
-            background: aiEnabled ? (showRecipeSelector ? '#035b49' : '#0fc7b9') : '#d1d5db',
+            background: aiEnabled ? (showRecipeSelector ? '#8b5cf6' : '#6366f1') : '#94a3b8',
             color: 'white',
             border: 'none',
             padding: isMobile ? '0.75rem 1rem' : '0.5rem 1rem',
@@ -634,7 +628,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           onClick: async () => {
             try {
               const consolidated = await enhancedShoppingListService.consolidateItems();
-              setItems(consolidated.items);
+              setItems(consolidated);
             } catch (err) {
               setError('Failed to consolidate list');
             }
@@ -693,10 +687,10 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     React.createElement('div', {
       key: 'voice-status',
       style: {
-        background: '#ffffff',
+        background: '#0f172a',
         borderRadius: '0.5rem',
         padding: '1rem',
-        border: `1px solid ${isListening ? '#EA6A47' : '#e5e7eb'}`,
+        border: `1px solid ${isListening ? '#f97316' : '#334155'}`,
         marginBottom: '1rem',
         display: 'flex',
         justifyContent: 'space-between',
@@ -706,11 +700,11 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     }, [
       React.createElement('div', {
         key: 'voice-info',
-        style: { color: '#1a1a1a', display: 'flex', flexDirection: 'column', gap: '0.25rem' }
+        style: { color: '#f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.25rem' }
       }, [
         React.createElement('strong', {
           key: 'voice-title',
-          style: { color: isListening ? '#EA6A47' : '#4b5563' }
+          style: { color: isListening ? '#f97316' : '#94a3b8' }
         }, isListening ? 'Listening for commands…' : 'Voice assistant idle'),
         voiceTranscript && React.createElement('span', {
           key: 'voice-transcript',
@@ -733,7 +727,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     showRecipeSelector && React.createElement('div', {
       key: 'recipe-selector',
       style: {
-        background: '#ffffff',
+        background: '#1e293b',
         borderRadius: '0.5rem',
         padding: '1.5rem',
         marginBottom: '1rem',
@@ -745,7 +739,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         style: {
           fontSize: '1.25rem',
           fontWeight: 'bold',
-          color: '#1a1a1a',
+          color: '#f1f5f9',
           marginBottom: '1rem',
           display: 'flex',
           alignItems: 'center',
@@ -766,8 +760,8 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           React.createElement('div', {
             key: recipe.id,
             style: {
-              background: selectedRecipes.includes(recipe.id) ? '#f0fdfa' : '#ffffff',
-              border: `2px solid ${selectedRecipes.includes(recipe.id) ? '#0fc7b9' : '#e5e7eb'}`,
+              background: selectedRecipes.includes(recipe.id) ? '#312e81' : '#0f172a',
+              border: `2px solid ${selectedRecipes.includes(recipe.id) ? '#6366f1' : '#475569'}`,
               borderRadius: '0.5rem',
               padding: '1rem',
               cursor: 'pointer',
@@ -787,7 +781,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
               React.createElement('h4', {
                 key: 'recipe-name',
                 style: {
-                  color: '#1a1a1a',
+                  color: '#f1f5f9',
                   margin: 0,
                   fontSize: '1rem',
                   fontWeight: 'bold'
@@ -811,7 +805,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             React.createElement('div', {
               key: 'recipe-category',
               style: {
-                color: '#4b5563',
+                color: '#94a3b8',
                 fontSize: '0.875rem',
                 marginBottom: '0.5rem'
               }
@@ -836,14 +830,14 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           gap: '0.5rem',
           justifyContent: 'space-between',
           alignItems: 'center',
-          borderTop: '1px solid #e5e7eb',
+          borderTop: '1px solid #334155',
           paddingTop: '1rem'
         }
       }, [
         React.createElement('span', {
           key: 'selection-count',
           style: {
-            color: '#4b5563',
+            color: '#94a3b8',
             fontSize: '0.875rem'
           }
         }, `${selectedRecipes.length} recipe${selectedRecipes.length !== 1 ? 's' : ''} selected`),
@@ -874,7 +868,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
             onClick: addMultipleRecipeIngredients,
             disabled: aiLoading || selectedRecipes.length === 0,
             style: {
-              background: aiLoading || selectedRecipes.length === 0 ? '#d1d5db' : '#0fc7b9',
+              background: aiLoading || selectedRecipes.length === 0 ? '#475569' : '#10b981',
               color: 'white',
               border: 'none',
               padding: '0.5rem 1rem',
@@ -935,11 +929,11 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     showTemplates && React.createElement('div', {
       key: 'templates-panel',
       style: {
-        background: '#ffffff',
+        background: '#0f172a',
         borderRadius: '0.75rem',
         padding: '1.5rem',
         marginTop: '1rem',
-        border: '1px solid #e5e7eb'
+        border: '1px solid #334155'
       }
     }, [
       React.createElement('h3', {
@@ -947,7 +941,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         style: {
           fontSize: '1.25rem',
           fontWeight: 'bold',
-          color: '#1a1a1a',
+          color: '#f1f5f9',
           marginBottom: '1rem',
           display: 'flex',
           gap: '0.5rem',
@@ -967,8 +961,8 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           ? templates.map(template => React.createElement('div', {
               key: template.id,
               style: {
-                background: '#ffffff',
-                border: '1px solid #e5e7eb',
+                background: '#1e293b',
+                border: '1px solid #334155',
                 borderRadius: '0.5rem',
                 padding: '1rem',
                 display: 'flex',
@@ -1020,7 +1014,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
               React.createElement('span', {
                 key: 'template-count',
                 style: {
-                  color: '#4b5563',
+                  color: '#94a3b8',
                   fontSize: '0.75rem'
                 }
               }, `${template.items.length} items`),
@@ -1041,7 +1035,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           : React.createElement('p', {
               key: 'no-templates',
               style: {
-                color: '#4b5563',
+                color: '#94a3b8',
                 margin: 0,
                 fontSize: '0.875rem'
               }
@@ -1079,10 +1073,10 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
     React.createElement('div', {
       key: 'content',
       style: {
-        background: '#ffffff',
+        background: '#1e293b',
         borderRadius: '0.5rem',
         padding: '1.5rem',
-        border: '1px solid #e5e7eb'
+        border: '1px solid #334155'
       }
     }, [
       // Add new item form
@@ -1110,10 +1104,10 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           style: {
             flex: 1,
             padding: '0.75rem',
-            border: '1px solid #d1d5db',
+            border: '1px solid #475569',
             borderRadius: '0.375rem',
-            background: '#ffffff',
-            color: '#1a1a1a',
+            background: '#0f172a',
+            color: '#f1f5f9',
             fontSize: '1rem'
           }
         }),
@@ -1123,7 +1117,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
           onClick: addItem,
           disabled: !newItemText.trim(),
           style: {
-            background: newItemText.trim() ? '#0fc7b9' : '#d1d5db',
+            background: newItemText.trim() ? '#10b981' : '#475569',
             color: 'white',
             border: 'none',
             padding: '0.75rem 1.5rem',
@@ -1148,10 +1142,10 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                   alignItems: 'center',
                   gap: isMobile ? '0.5rem' : '0.75rem',
                   padding: isMobile ? '0.875rem' : '0.75rem',
-                  background: item.is_checked ? '#f9fafb' : '#ffffff',
+                  background: item.is_checked ? '#0f172a' : 'transparent',
                   borderRadius: '0.375rem',
                   marginBottom: '0.5rem',
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid #334155',
                   transition: 'background-color 0.2s'
                 }
               }, [
@@ -1191,7 +1185,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                     flex: 1,
                     background: 'transparent',
                     border: 'none',
-                    color: item.is_checked ? '#9ca3af' : '#1a1a1a',
+                    color: item.is_checked ? '#64748b' : '#f1f5f9',
                     fontSize: '1rem',
                     textDecoration: item.is_checked ? 'line-through' : 'none',
                     cursor: 'text',
@@ -1239,7 +1233,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
                   fontSize: '1.25rem', 
                   fontWeight: 'bold', 
                   marginBottom: '0.5rem', 
-                  color: '#4b5563' 
+                  color: '#94a3b8' 
                 }
               }, 'Your shopping list is empty'),
               
@@ -1259,7 +1253,7 @@ export const ShoppingListPage: React.FC<ShoppingListPageProps> = () => {
         style: {
           marginTop: '1rem',
           paddingTop: '1rem',
-          borderTop: '1px solid #e5e7eb',
+          borderTop: '1px solid #334155',
           display: 'flex',
           justifyContent: 'space-between',
           color: '#64748b',
