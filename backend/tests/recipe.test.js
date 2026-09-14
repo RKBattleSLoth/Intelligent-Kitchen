@@ -171,6 +171,66 @@ describe('Recipe API', () => {
     });
   });
 
+  describe('Skylight sync (skylight_id)', () => {
+    let skylightRecipeId;
+    const skylightId = 99990001;
+
+    afterAll(async () => {
+      await query('DELETE FROM recipes WHERE skylight_id = $1', [skylightId]);
+    });
+
+    it('should create a recipe with a skylightId and return it', async () => {
+      const response = await request(app)
+        .post('/api/recipes')
+        .send({
+          name: 'Test Skylight Recipe',
+          instructions: 'Imported from the Skylight frame',
+          servings: 4,
+          isPublic: true,
+          skylightId
+        })
+        .expect(201);
+
+      expect(Number(response.body.recipe.skylight_id)).toBe(skylightId);
+      skylightRecipeId = response.body.recipe.id;
+    });
+
+    it('should return skylight_id in list and detail reads', async () => {
+      const detail = await request(app)
+        .get(`/api/recipes/${skylightRecipeId}`)
+        .expect(200);
+      expect(Number(detail.body.skylight_id)).toBe(skylightId);
+
+      const list = await request(app)
+        .get('/api/recipes?search=Test Skylight Recipe')
+        .expect(200);
+      const match = list.body.recipes.find(r => r.id === skylightRecipeId);
+      expect(match).toBeDefined();
+      expect(Number(match.skylight_id)).toBe(skylightId);
+    });
+
+    it('should reject a duplicate skylightId with 409', async () => {
+      const response = await request(app)
+        .post('/api/recipes')
+        .send({
+          name: 'Test Skylight Duplicate',
+          instructions: 'Should conflict',
+          servings: 4,
+          skylightId
+        })
+        .expect(409);
+      expect(response.body.error).toMatch(/already exists/);
+    });
+
+    it('should set skylight_id through update', async () => {
+      const response = await request(app)
+        .put(`/api/recipes/${skylightRecipeId}`)
+        .send({ skylightId: skylightId })
+        .expect(200);
+      expect(Number(response.body.recipe.skylight_id)).toBe(skylightId);
+    });
+  });
+
   describe('GET /api/recipes', () => {
     it('should get all public recipes (no auth)', async () => {
       const response = await request(app)
