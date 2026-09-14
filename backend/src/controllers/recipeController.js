@@ -13,7 +13,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const offset = (page - 1) * limit;
     
     let sql = `
-      SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at,
+      SELECT r.id, r.name, r.description, r.instructions, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at, r.updated_at,
              u.first_name || ' ' || u.last_name as author_name,
              n.calories, n.protein, n.carbohydrates, n.fat
       FROM recipes r
@@ -382,7 +382,7 @@ router.get('/user/my-recipes', async (req, res) => { // Temporarily disable auth
     const offset = (page - 1) * limit;
 
     const result = await query(
-      `SELECT r.id, r.name, r.description, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at,
+      `SELECT r.id, r.name, r.description, r.instructions, r.prep_time, r.cook_time, r.servings, r.difficulty, r.meal_type, r.skylight_id, r.is_public, r.created_at, r.updated_at,
               n.calories, n.protein, n.carbohydrates, n.fat
        FROM recipes r
        LEFT JOIN nutrition_info n ON r.id = n.recipe_id
