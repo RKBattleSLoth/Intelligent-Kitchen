@@ -2,6 +2,7 @@ const { URL } = require('url');
 const RequestRouter = require('./RequestRouter');
 const RecipeAgent = require('./agents/RecipeAgent');
 const ResponseCache = require('./ResponseCache');
+const SocialPostFetcher = require('./SocialPostFetcher');
 const { parseIngredientsFromInstructions } = require('../../utils/ingredientParser');
 
 class RecipeUrlExtractor {
@@ -14,11 +15,16 @@ class RecipeUrlExtractor {
     this.parserConfidenceThreshold = options.parserConfidenceThreshold ?? 0.5;
     this.multiAgentThreshold = options.multiAgentThreshold ?? 0.35;
     this.readerBaseUrl = options.readerBaseUrl || process.env.RECIPE_READER_BASE_URL || 'https://r.jina.ai/';
+    this.socialFetcher = options.socialFetcher || new SocialPostFetcher({ readerBaseUrl: this.readerBaseUrl });
   }
 
   async extract(url, { userId = 'url-importer' } = {}) {
     if (!url) {
       throw new Error('URL is required');
+    }
+
+    if (SocialPostFetcher.detectPlatform(url)) {
+      return this.extractFromSocialPost(url, { userId });
     }
 
     const cached = await this.getCachedResult(url);
@@ -59,9 +65,106 @@ class RecipeUrlExtractor {
     return payload;
   }
 
-  async processContent(url, sanitizedHtml, structured) {
+  // Instagram Reels / TikTok: read the caption. If the caption only teases the
+  // recipe and links to a blog, import the linked page instead (keeping the
+  // post as the source). Otherwise the caption itself is the recipe text.
+  async extractFromSocialPost(url, { userId }) {
+    const cacheKey = `social:v1:${SocialPostFetcher.canonicalUrl(url)}`;
+    const cached = await this.getCachedResult(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const post = await this.socialFetcher.fetchPost(url);
+    const platformLabel = post.platform === 'tiktok' ? 'TikTok' : 'Instagram';
+    if (!post.caption) {
+      const error = new Error(`Couldn't read that ${platformLabel} post's caption. It may be private or deleted; try pasting the recipe text instead.`);
+      error.blockedBySite = false;
+      throw error;
+    }
+
+    const hasRecipe = SocialPostFetcher.looksLikeFullRecipe(post.caption);
+    const links = SocialPostFetcher.recipeLinks(post.caption);
+    if (!hasRecipe && links.length) {
+      for (const link of links.slice(0, 2)) {
+        try {
+          const linked = await this.extract(link, { userId });
+          if (linked?.ingredients?.length >= 3) {
+            const payload = {
+              ...linked,
+              cached: undefined,
+              sourceUrl: post.url,
+              linkedRecipeUrl: link,
+              socialPost: { platform: post.platform, author: post.author },
+              instructionsText: `${linked.instructionsText}\n\nFull recipe: ${link}`
+            };
+            await this.setCachedResult(cacheKey, payload);
+            return payload;
+          }
+        } catch (error) {
+          console.warn(`RecipeUrlExtractor: linked recipe ${link} failed`, error.message);
+        }
+      }
+    }
+
+    const captionText = `${platformLabel} post by ${post.author || 'unknown creator'}\n\n${post.caption}`;
+    const content = await this.processContent(post.url, captionText, { primary: null }, {
+      socialPlatform: platformLabel,
+      fallbackTitle: RecipeUrlExtractor.titleFromCaption(post.caption)
+    });
+
+    const ingredientExtraction = await this.determineIngredientExtraction({ url: post.url, userId, ...content });
+
+    let instructionsText = RecipeUrlExtractor.buildInstructionsText(content.ingredients, content.directions);
+    if (!content.ingredients.length && hasRecipe) {
+      // AI step unavailable: the caption is the recipe, so keep it verbatim.
+      instructionsText = `${post.caption}`;
+    } else if (!content.ingredients.length) {
+      // Teaser posts ("recipe on my Substack Friday") still save something useful.
+      instructionsText = `The ${platformLabel} caption doesn't include the full recipe.\n\nCaption:\n${post.caption}`;
+    } else if (links.length) {
+      instructionsText = `${instructionsText}\n\nCreator's link: ${links[0]}`;
+    }
+
+    const payload = {
+      success: true,
+      sourceUrl: post.url,
+      title: content.title,
+      description: content.description,
+      ingredients: content.ingredients,
+      directions: content.directions,
+      instructionsText,
+      servings: content.servings,
+      prepTimeMinutes: content.prepTimeMinutes,
+      cookTimeMinutes: content.cookTimeMinutes,
+      totalTimeMinutes: content.totalTimeMinutes,
+      aiMetadata: content.aiMetadata,
+      structuredData: null,
+      socialPost: { platform: post.platform, author: post.author },
+      ingredientExtraction
+    };
+
+    if (content.ingredients.length) {
+      await this.setCachedResult(cacheKey, payload);
+    }
+    return payload;
+  }
+
+  static titleFromCaption(caption) {
+    const firstLine = (caption || '').split(/\n/).map(line => line.trim()).find(line => /[a-z]/i.test(line)) || 'Imported Recipe';
+    const cleaned = firstLine
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+      .replace(/#\S+/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return (cleaned.length > 80 ? `${cleaned.slice(0, 77)}...` : cleaned) || 'Imported Recipe';
+  }
+
+  async processContent(url, sanitizedHtml, structured, options = {}) {
     const truncatedContent = sanitizedHtml.slice(0, this.maxContentLength);
-    const prompt = this.buildPrompt(url, truncatedContent, structured.primary);
+    const prompt = options.socialPlatform
+      ? this.buildSocialPrompt(url, truncatedContent, options.socialPlatform)
+      : this.buildPrompt(url, truncatedContent, structured.primary);
 
     const aiResponsePromise = this.router.route('recipe_analysis', truncatedContent, {
       forceModelName: this.modelName,
@@ -75,7 +178,7 @@ class RecipeUrlExtractor {
     });
 
     const parserPromise = Promise.resolve().then(() => {
-      const title = structured.primary?.name || this.deriveTitleFromUrl(url);
+      const title = structured.primary?.name || options.fallbackTitle || this.deriveTitleFromUrl(url);
       const description = structured.primary?.description || '';
       const ingredients = this.resolveList(null, structured.primary?.recipeIngredient);
       const directions = this.resolveDirections(null, structured.primary?.recipeInstructions);
@@ -389,6 +492,22 @@ Structured Recipe Hint: ${structuredHint}
 
 Sanitized Page Content:
 ${clipped}`;
+  }
+
+  buildSocialPrompt(url, caption, platformLabel) {
+    return `You are an expert culinary data extraction assistant. Below is the caption of a ${platformLabel} recipe video. Return a strict JSON object with the fields: title, description, ingredients (array of strings), directions (array of strings), servings (string or null), prepTimeMinutes (integer or null), cookTimeMinutes (integer or null), totalTimeMinutes (integer or null).
+
+Rules:
+- title: a short, plain dish name (e.g. "Brussels Sprout Sweet Potato Salad"), no emoji, hashtags, or series names like "Day 5".
+- Ingredients should be concise lines like "1 cup sugar" without bullets or emoji. Keep section headings out of ingredient lines; if the caption groups ingredients (e.g. dressing), prefix the line, e.g. "Dressing: 3 tbsp olive oil".
+- Directions should be ordered steps without numbering. Split run-on paragraphs into steps.
+- Use only what the caption says. If it lists dish components but no amounts, list the components without amounts. If it contains no ingredients at all, return empty arrays. Do not invent a recipe.
+- Respond with raw JSON only. Do not include markdown fences or commentary.
+
+Source URL: ${url}
+
+Caption:
+${caption}`;
   }
 
   parseAiResponse(content) {
